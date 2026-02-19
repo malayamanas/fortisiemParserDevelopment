@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FortiSIEM Custom Event Parser: SentinelOne Singularity Threat Events
+  =====================================================================
+  Vendor  : SentinelOne
+  Model   : Singularity
+  Version : ANY
+
+  INTEGRATION METHOD: Syslog (SENTINELONE_THREATS JSON payload)
+
+  LOG FORMAT:
+    MMM DD HH:MM:SS YYYY hostname srcIP SENTINELONE_THREATS: {JSON}
+
+  NOTE: Some SentinelOne syslog configurations emit SENTINELONE_ALERT: as the tag.
+        Update the eventFormatRecognizer literal and Step 1 regex if that is the case.
+
+  RECOGNIZER ANCHOR: Requires "threatInfo" key in JSON body to distinguish threat events
+                     from activity events (SENTINELONE_ACTIVITIES).
+
+  EVENT TYPES PRODUCED (dynamic via combineMsgId):
+    SentinelOne-Singularity-Threat-<Classification>-<mitigationStatus>
+    e.g. SentinelOne-Singularity-Threat-Malware-not_mitigated          (severity 9)
+         SentinelOne-Singularity-Threat-Malware-mitigated              (severity 4)
+         SentinelOne-Singularity-Threat-Ransomware-not_mitigated       (severity 10)
+         SentinelOne-Singularity-Threat-PUA-not_mitigated              (severity 7)
+         SentinelOne-Singularity-Threat-Generic                        (severity 5 fallback)
+
+  SEVERITY MATRIX:
+    confidenceLevel=malicious  + mitigationStatus=not_mitigated -> 9
+    confidenceLevel=malicious  + mitigationStatus=mitigated     -> 4
+    confidenceLevel=malicious  + other mitigationStatus         -> 8
+    confidenceLevel=suspicious + mitigationStatus=not_mitigated -> 7
+    confidenceLevel=suspicious + other                          -> 5
+    confidenceLevel=benign                                      -> 2
+    classification=Ransomware  + mitigationStatus=not_mitigated -> 10 (override)
+    default                                                     -> 5
+
+  FIELD MAPPINGS (JSON key -> FortiSIEM EAT):
+    accountName                              -> customer
+    threatInfo.threatName                    -> msg
+    agentDetectionInfo.agentComputerName     -> srcHostName
+    agentDetectionInfo.agentIp               -> srcIpAddr
+    agentDetectionInfo.externalIp            -> destIpAddr
+    agentDetectionInfo.agentLastLoggedInUserName -> user
+    threatInfo.processUser                   -> procName
+    fileDisplayName                          -> fileName
+    fileContentHash                          -> hashSHA1
+    threatInfo.md5                           -> hashMD5
+    threatInfo.mitigationStatus              -> eventAction (mitigated=1, not_mitigated=2, other=0)
+    createdAt / threatInfo.createdAt         -> eventTime
+    syslog header timestamp                  -> deviceTime
+-->
+
+<eventParser name="SentinelOneSingularityThreat">
+  <deviceType>
+    <Vendor>SentinelOne</Vendor>
+    <Model>Singularity</Model>
+    <Version>ANY</Version>
+  </deviceType>
+
+  <!-- Local patterns -->
+  <patternDefinitions>
+    <pattern name="patS1Timestamp"><![CDATA[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z]]></pattern>
+  </patternDefinitions>
+
+  <!--
+    eventFormatRecognizer
+    Selects this parser when the raw log:
+      1. Matches the syslog header: MMM DD HH:MM:SS YYYY hostname IP
+      2. Contains the tag SENTINELONE_THREATS:
+      3. Contains "threatInfo" in the JSON body (distinguishes from activity events)
+  -->
+  <eventFormatRecognizer>
+    <![CDATA[<:gPatMon>\s+<:gPatDay>\s+<:gPatTime>\s+<:gPatYear>\s+<:gPatStr>\s+<:gPatIpAddr>\s+SENTINELONE_THREATS:.*"threatInfo"]]>
+  </eventFormatRecognizer>
+
+  <parsingInstructions>
+
+    <!--
+      Step 1: Parse syslog header and extract JSON body.
+    -->
+    <collectFieldsByRegex src="$_rawmsg">
+      <regex><![CDATA[<_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>\s+<_year:gPatYear>\s+<_devHostname:gPatStr>\s+<:gPatIpAddr>\s+SENTINELONE_THREATS:\s+<_jsonBody:gPatMesgBody>]]></regex>
+    </collectFieldsByRegex>
+
+    <!--
+      Step 2: Set deviceTime from syslog header timestamp.
+    -->
+    <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_year, $_time)</setEventAttribute>
+
+    <!--
+      Step 3: Parse all JSON fields.
+      Nested objects accessed via dot notation (e.g. threatInfo.classification).
+    -->
+    <collectAndSetAttrByJSON src="$_jsonBody">
+
+      <!-- Account and top-level agent identity -->
+      <attrKeyMap attr="_s1AccountId"       key="accountId"/>
+      <attrKeyMap attr="customer"           key="accountName"/>
+      <attrKeyMap attr="_s1AgentId"         key="agentId"/>
+      <attrKeyMap attr="_s1AgentIp"         key="agentIp"/>
+      <attrKeyMap attr="_s1OsType"          key="agentOsType"/>
+      <attrKeyMap attr="_s1AgentVersion"    key="agentVersion"/>
+
+      <!-- Timestamps -->
+      <attrKeyMap attr="_createdAt"         key="createdAt"/>
+      <attrKeyMap attr="_updatedAt"         key="updatedAt"/>
+
+      <!-- Threat file information -->
+      <attrKeyMap attr="fileName"           key="fileDisplayName"/>
+      <attrKeyMap attr="_filePath"          key="filePath"/>
+      <attrKeyMap attr="hashSHA1"           key="fileContentHash"/>
+
+      <!-- Grouping and site -->
+      <attrKeyMap attr="_s1GroupId"         key="groupId"/>
+      <attrKeyMap attr="_s1GroupName"       key="groupName"/>
+      <attrKeyMap attr="_s1SiteId"          key="siteId"/>
+      <attrKeyMap attr="_s1SiteName"        key="siteName"/>
+
+      <!-- Event identifiers -->
+      <attrKeyMap attr="_s1EventId"         key="id"/>
+      <attrKeyMap attr="_s1ThreatId"        key="threatId"/>
+
+      <!-- threatInfo: core threat intelligence fields -->
+      <attrKeyMap attr="_classification"    key="threatInfo.classification"/>
+      <attrKeyMap attr="_classificationSrc" key="threatInfo.classificationSource"/>
+      <attrKeyMap attr="_confidenceLevel"   key="threatInfo.confidenceLevel"/>
+      <attrKeyMap attr="_incidentStatus"    key="threatInfo.incidentStatus"/>
+      <attrKeyMap attr="_mitigationStatus"  key="threatInfo.mitigationStatus"/>
+      <attrKeyMap attr="_threatName"        key="threatInfo.threatName"/>
+      <attrKeyMap attr="hashMD5"            key="threatInfo.md5"/>
+      <attrKeyMap attr="_detectionType"     key="threatInfo.detectionType"/>
+      <attrKeyMap attr="_analystVerdict"    key="threatInfo.analystVerdict"/>
+      <attrKeyMap attr="_processUser"       key="threatInfo.processUser"/>
+      <attrKeyMap attr="_initiatedBy"       key="threatInfo.initiatedBy"/>
+      <attrKeyMap attr="_autoResolved"      key="threatInfo.automaticallyResolved"/>
+      <attrKeyMap attr="_rebootRequired"    key="threatInfo.rebootRequired"/>
+      <attrKeyMap attr="_cloudVerdict"      key="threatInfo.cloudVerdict"/>
+      <attrKeyMap attr="_mitigatedPreempt"  key="threatInfo.mitigatedPreemptively"/>
+      <attrKeyMap attr="_threatCreatedAt"   key="threatInfo.createdAt"/>
+
+      <!-- agentDetectionInfo: endpoint state at time of detection -->
+      <attrKeyMap attr="srcHostName"        key="agentDetectionInfo.agentComputerName"/>
+      <attrKeyMap attr="_detectAgentIp"     key="agentDetectionInfo.agentIp"/>
+      <attrKeyMap attr="_detectExternalIp"  key="agentDetectionInfo.externalIp"/>
+      <attrKeyMap attr="user"               key="agentDetectionInfo.agentLastLoggedInUserName"/>
+      <attrKeyMap attr="_agentMitigMode"    key="agentDetectionInfo.agentMitigationMode"/>
+      <attrKeyMap attr="_agentOsName"       key="agentDetectionInfo.agentOsName"/>
+      <attrKeyMap attr="_agentUuid"         key="agentDetectionInfo.agentUuid"/>
+      <attrKeyMap attr="_agentDomain"       key="agentDetectionInfo.agentDomain"/>
+
+      <!-- agentRealtimeInfo: current live state of the agent -->
+      <attrKeyMap attr="_rtIsActive"        key="agentRealtimeInfo.agentIsActive"/>
+      <attrKeyMap attr="_rtMachineType"     key="agentRealtimeInfo.agentMachineType"/>
+      <attrKeyMap attr="_rtOsType"          key="agentRealtimeInfo.agentOsType"/>
+      <attrKeyMap attr="_rtExternalIp"      key="agentRealtimeInfo.externalIp"/>
+    </collectAndSetAttrByJSON>
+
+    <!--
+      Step 4: Set eventTime.
+      Prefer threatInfo.createdAt (threat detection time); fall back to top-level createdAt.
+    -->
+    <when test="exist _threatCreatedAt">
+      <setEventAttribute attr="eventTime">toDateTime($_threatCreatedAt, "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'")</setEventAttribute>
+    </when>
+    <when test="not_exist _threatCreatedAt">
+      <when test="exist _createdAt">
+        <setEventAttribute attr="eventTime">toDateTime($_createdAt, "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'")</setEventAttribute>
+      </when>
+    </when>
+
+    <!--
+      Step 5: Set msg to the threat name — the primary human-readable identifier.
+    -->
+    <when test="exist _threatName">
+      <setEventAttribute attr="msg">$_threatName</setEventAttribute>
+    </when>
+
+    <!--
+      Step 6: Resolve source IP (internal/LAN address of the endpoint).
+      Prefer agentDetectionInfo.agentIp; fall back to top-level agentIp.
+    -->
+    <when test="exist _detectAgentIp">
+      <collectFieldsByRegex src="$_detectAgentIp">
+        <regex><![CDATA[<srcIpAddr:gPatIpAddr>]]></regex>
+      </collectFieldsByRegex>
+    </when>
+    <when test="not_exist srcIpAddr">
+      <when test="exist _s1AgentIp">
+        <collectFieldsByRegex src="$_s1AgentIp">
+          <regex><![CDATA[<srcIpAddr:gPatIpAddr>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+    </when>
+
+    <!--
+      Step 7: Resolve destination IP (external/NAT address of the endpoint).
+      Prefer agentDetectionInfo.externalIp; fall back to agentRealtimeInfo.externalIp.
+    -->
+    <when test="exist _detectExternalIp">
+      <collectFieldsByRegex src="$_detectExternalIp">
+        <regex><![CDATA[<destIpAddr:gPatIpAddr>]]></regex>
+      </collectFieldsByRegex>
+    </when>
+    <when test="not_exist destIpAddr">
+      <when test="exist _rtExternalIp">
+        <collectFieldsByRegex src="$_rtExternalIp">
+          <regex><![CDATA[<destIpAddr:gPatIpAddr>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+    </when>
+
+    <!--
+      Step 8: Set procName to the process user context under which the threat ran.
+    -->
+    <when test="exist _processUser">
+      <setEventAttribute attr="procName">$_processUser</setEventAttribute>
+    </when>
+
+    <!--
+      Step 9: Map mitigationStatus to numeric eventAction.
+        mitigated          -> 1  (threat stopped / blocked)
+        not_mitigated      -> 2  (threat active / allowed through)
+        partially_mitigated -> 0  (partial action taken)
+        other / unknown    -> 0
+    -->
+    <when test="exist _mitigationStatus">
+      <choose>
+        <when test="$_mitigationStatus = 'mitigated'">
+          <setEventAttribute attr="eventAction">1</setEventAttribute>
+        </when>
+        <when test="$_mitigationStatus = 'not_mitigated'">
+          <setEventAttribute attr="eventAction">2</setEventAttribute>
+        </when>
+        <otherwise>
+          <setEventAttribute attr="eventAction">0</setEventAttribute>
+        </otherwise>
+      </choose>
+    </when>
+
+    <!--
+      Step 10: Set eventType dynamically from classification + mitigationStatus.
+      Format: SentinelOne-Singularity-Threat-<Classification>-<mitigationStatus>
+
+      Note: Register dynamic event types in ADMIN > Device Support > Event Types.
+            Use wildcard SentinelOne-Singularity-Threat-* for bulk registration.
+    -->
+    <choose>
+      <when test="exist _classification">
+        <when test="exist _mitigationStatus">
+          <setEventAttribute attr="eventType">combineMsgId("SentinelOne-Singularity-Threat-", $_classification, "-", $_mitigationStatus)</setEventAttribute>
+        </when>
+        <when test="not_exist _mitigationStatus">
+          <setEventAttribute attr="eventType">combineMsgId("SentinelOne-Singularity-Threat-", $_classification)</setEventAttribute>
+        </when>
+      </when>
+      <otherwise>
+        <setEventAttribute attr="eventType">SentinelOne-Singularity-Threat-Generic</setEventAttribute>
+      </otherwise>
+    </choose>
+
+    <!--
+      Step 11: Set eventSeverity based on confidenceLevel x mitigationStatus.
+
+      Severity matrix (see header for full table):
+        malicious  + not_mitigated  -> 9
+        malicious  + mitigated      -> 4
+        malicious  + other          -> 8
+        suspicious + not_mitigated  -> 7
+        suspicious + other          -> 5
+        benign                      -> 2
+        default                     -> 5
+
+      Ransomware override: classification=Ransomware + not_mitigated -> 10
+    -->
+    <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+
+    <when test="exist _confidenceLevel">
+      <choose>
+        <when test="$_confidenceLevel = 'malicious'">
+          <setEventAttribute attr="eventSeverity">8</setEventAttribute>
+          <when test="exist _mitigationStatus">
+            <choose>
+              <when test="$_mitigationStatus = 'not_mitigated'">
+                <setEventAttribute attr="eventSeverity">9</setEventAttribute>
+              </when>
+              <when test="$_mitigationStatus = 'mitigated'">
+                <setEventAttribute attr="eventSeverity">4</setEventAttribute>
+              </when>
+            </choose>
+          </when>
+        </when>
+        <when test="$_confidenceLevel = 'suspicious'">
+          <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+          <when test="exist _mitigationStatus">
+            <when test="$_mitigationStatus = 'not_mitigated'">
+              <setEventAttribute attr="eventSeverity">7</setEventAttribute>
+            </when>
+          </when>
+        </when>
+        <when test="$_confidenceLevel = 'benign'">
+          <setEventAttribute attr="eventSeverity">2</setEventAttribute>
+        </when>
+      </choose>
+    </when>
+
+    <!-- Ransomware override: always severity 10 when not yet mitigated -->
+    <when test="exist _classification">
+      <when test="$_classification = 'Ransomware'">
+        <when test="exist _mitigationStatus">
+          <when test="$_mitigationStatus = 'not_mitigated'">
+            <setEventAttribute attr="eventSeverity">10</setEventAttribute>
+          </when>
+        </when>
+      </when>
+    </when>
+
+  </parsingInstructions>
+</eventParser>
