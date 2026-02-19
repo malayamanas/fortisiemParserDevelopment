@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FortiSIEM Custom Event Parser: SentinelOne Singularity Threat Events (Active / Not-Mitigated)
+  ==============================================================================================
+  Vendor  : SentinelOne
+  Model   : Singularity
+  Version : ANY
+
+  INTEGRATION METHOD: Syslog (SENTINELONE_THREATS JSON payload)
+
+  LOG FORMAT:
+    MMM DD HH:MM:SS YYYY hostname srcIP SENTINELONE_THREATS: {JSON}
+
+  PURPOSE:
+    High-fidelity, low-noise parser. Reduces event volume by processing ONLY
+    threats where incidentStatus is "not_mitigated" AND the detection is recent
+    (within the last 5 days). Mitigated or resolved threats are silently skipped
+    at the recognizer level.
+
+  NOTE: Some SentinelOne syslog configurations emit SENTINELONE_ALERT: as the
+        tag. Update the eventFormatRecognizer literal and Step 1 regex if needed.
+
+  FILTER CONDITIONS (both must be satisfied):
+    1. threatInfo.incidentStatus = "not_mitigated"  (enforced in eventFormatRecognizer)
+    2. threatInfo.createdAt is within the last 5 days (432,000,000 ms) (enforced in parsingInstructions)
+
+  EVENT TYPES PRODUCED:
+    Active (within 5 days, not_mitigated):
+      SentinelOne-Singularity-Threat-<Classification>-not_mitigated  (dynamic via combineMsgId)
+      SentinelOne-Singularity-Threat-Generic                         (fallback when no classification)
+
+    Stale (older than 5 days, still not_mitigated):
+      SentinelOne-Singularity-Threat-Stale                           (severity 1)
+
+    Age unknown (fallback):
+      Same as Active (createdAt absent or unparseable).
+
+  SEVERITY MATRIX (active events only, mitigationStatus always not_mitigated here):
+    confidenceLevel=malicious  + not_mitigated -> 9
+    confidenceLevel=suspicious + not_mitigated -> 7
+    confidenceLevel=benign                     -> 2
+    classification=Ransomware  + not_mitigated -> 10 (override; highest priority)
+    default                                    -> 5
+
+  FIELD MAPPINGS (JSON key -> FortiSIEM EAT):
+    accountName                                  -> customer
+    threatInfo.threatName                        -> msg
+    agentDetectionInfo.agentComputerName         -> srcHostName
+    agentDetectionInfo.agentIp                   -> srcIpAddr
+    agentDetectionInfo.externalIp                -> destIpAddr
+    agentDetectionInfo.agentLastLoggedInUserName -> user
+    threatInfo.processUser                       -> procName
+    fileDisplayName                              -> fileName
+    fileContentHash                              -> hashSHA1
+    threatInfo.md5                               -> hashMD5
+    threatInfo.mitigationStatus                  -> eventAction (not_mitigated=2, other=0)
+    threatInfo.createdAt / createdAt             -> eventTime
+    syslog header timestamp                      -> deviceTime
+
+  REGISTER EVENT TYPES:
+    ADMIN > Device Support > Event Types
+    Use wildcard SentinelOne-Singularity-Threat-* to bulk-register dynamic types.
+-->
+
+<eventParser name="SentinelOneSingularityThreatActive">
+  <deviceType>
+    <Vendor>SentinelOne</Vendor>
+    <Model>Singularity</Model>
+    <Version>ANY</Version>
+  </deviceType>
+
+  <patternDefinitions>
+    <pattern name="patS1Timestamp"><![CDATA[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z]]></pattern>
+  </patternDefinitions>
+
+  <!--
+    eventFormatRecognizer
+    Selects this parser ONLY when ALL of the following are true in the raw log:
+      1. Syslog header matches: MMM DD HH:MM:SS YYYY hostname IP
+      2. Contains the tag SENTINELONE_THREATS:
+      3. Contains "incidentStatus":"not_mitigated" in the JSON body.
+         (threatInfo.incidentStatus is the only incidentStatus field in threat events;
+          it does not appear at the JSON top level, so the substring match is unambiguous.)
+
+    The createdAt 5-day age filter is enforced dynamically inside parsingInstructions.
+    Logs where incidentStatus is absent, mitigated, or any other value are NOT parsed.
+  -->
+  <eventFormatRecognizer>
+    <![CDATA[<:gPatMon>\s+<:gPatDay>\s+<:gPatTime>\s+<:gPatYear>\s+<:gPatStr>\s+<:gPatIpAddr>\s+SENTINELONE_THREATS:.*"incidentStatus"\s*:\s*"not_mitigated"]]>
+  </eventFormatRecognizer>
+
+  <parsingInstructions>
+
+    <!--
+      Step 1: Parse syslog header and extract JSON body.
+    -->
+    <collectFieldsByRegex src="$_rawmsg">
+      <regex><![CDATA[<_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>\s+<_year:gPatYear>\s+<_devHostname:gPatStr>\s+<:gPatIpAddr>\s+SENTINELONE_THREATS:\s+<_jsonBody:gPatMesgBody>]]></regex>
+    </collectFieldsByRegex>
+
+    <!--
+      Step 2: Set deviceTime from syslog header timestamp.
+    -->
+    <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_year, $_time)</setEventAttribute>
+
+    <!--
+      Step 3: Parse all JSON fields.
+      Nested objects accessed via dot notation (e.g. threatInfo.classification).
+    -->
+    <collectAndSetAttrByJSON src="$_jsonBody">
+
+      <!-- Account and top-level agent identity -->
+      <attrKeyMap attr="_s1AccountId"       key="accountId"/>
+      <attrKeyMap attr="customer"           key="accountName"/>
+      <attrKeyMap attr="_s1AgentId"         key="agentId"/>
+      <attrKeyMap attr="_s1AgentIp"         key="agentIp"/>
+      <attrKeyMap attr="_s1OsType"          key="agentOsType"/>
+      <attrKeyMap attr="_s1AgentVersion"    key="agentVersion"/>
+
+      <!-- Timestamps -->
+      <attrKeyMap attr="_createdAt"         key="createdAt"/>
+      <attrKeyMap attr="_updatedAt"         key="updatedAt"/>
+
+      <!-- Threat file information -->
+      <attrKeyMap attr="fileName"           key="fileDisplayName"/>
+      <attrKeyMap attr="_filePath"          key="filePath"/>
+      <attrKeyMap attr="hashSHA1"           key="fileContentHash"/>
+
+      <!-- Grouping and site -->
+      <attrKeyMap attr="_s1GroupId"         key="groupId"/>
+      <attrKeyMap attr="_s1GroupName"       key="groupName"/>
+      <attrKeyMap attr="_s1SiteId"          key="siteId"/>
+      <attrKeyMap attr="_s1SiteName"        key="siteName"/>
+
+      <!-- Event identifiers -->
+      <attrKeyMap attr="_s1EventId"         key="id"/>
+      <attrKeyMap attr="_s1ThreatId"        key="threatId"/>
+
+      <!-- threatInfo: core threat intelligence fields -->
+      <attrKeyMap attr="_classification"    key="threatInfo.classification"/>
+      <attrKeyMap attr="_classificationSrc" key="threatInfo.classificationSource"/>
+      <attrKeyMap attr="_confidenceLevel"   key="threatInfo.confidenceLevel"/>
+      <attrKeyMap attr="_incidentStatus"    key="threatInfo.incidentStatus"/>
+      <attrKeyMap attr="_mitigationStatus"  key="threatInfo.mitigationStatus"/>
+      <attrKeyMap attr="_threatName"        key="threatInfo.threatName"/>
+      <attrKeyMap attr="hashMD5"            key="threatInfo.md5"/>
+      <attrKeyMap attr="_detectionType"     key="threatInfo.detectionType"/>
+      <attrKeyMap attr="_analystVerdict"    key="threatInfo.analystVerdict"/>
+      <attrKeyMap attr="_processUser"       key="threatInfo.processUser"/>
+      <attrKeyMap attr="_initiatedBy"       key="threatInfo.initiatedBy"/>
+      <attrKeyMap attr="_autoResolved"      key="threatInfo.automaticallyResolved"/>
+      <attrKeyMap attr="_rebootRequired"    key="threatInfo.rebootRequired"/>
+      <attrKeyMap attr="_cloudVerdict"      key="threatInfo.cloudVerdict"/>
+      <attrKeyMap attr="_mitigatedPreempt"  key="threatInfo.mitigatedPreemptively"/>
+      <attrKeyMap attr="_threatCreatedAt"   key="threatInfo.createdAt"/>
+
+      <!-- agentDetectionInfo: endpoint state at time of detection -->
+      <attrKeyMap attr="srcHostName"        key="agentDetectionInfo.agentComputerName"/>
+      <attrKeyMap attr="_detectAgentIp"     key="agentDetectionInfo.agentIp"/>
+      <attrKeyMap attr="_detectExternalIp"  key="agentDetectionInfo.externalIp"/>
+      <attrKeyMap attr="user"               key="agentDetectionInfo.agentLastLoggedInUserName"/>
+      <attrKeyMap attr="_agentMitigMode"    key="agentDetectionInfo.agentMitigationMode"/>
+      <attrKeyMap attr="_agentOsName"       key="agentDetectionInfo.agentOsName"/>
+      <attrKeyMap attr="_agentUuid"         key="agentDetectionInfo.agentUuid"/>
+      <attrKeyMap attr="_agentDomain"       key="agentDetectionInfo.agentDomain"/>
+
+      <!-- agentRealtimeInfo: current live state of the agent -->
+      <attrKeyMap attr="_rtIsActive"        key="agentRealtimeInfo.agentIsActive"/>
+      <attrKeyMap attr="_rtMachineType"     key="agentRealtimeInfo.agentMachineType"/>
+      <attrKeyMap attr="_rtOsType"          key="agentRealtimeInfo.agentOsType"/>
+      <attrKeyMap attr="_rtExternalIp"      key="agentRealtimeInfo.externalIp"/>
+    </collectAndSetAttrByJSON>
+
+    <!--
+      Step 4: Set eventTime and compute age in milliseconds.
+      Prefer threatInfo.createdAt (threat detection time); fall back to top-level createdAt.
+      5 days = 5 * 24 * 60 * 60 * 1000 = 432,000,000 ms
+    -->
+    <when test="exist _threatCreatedAt">
+      <setEventAttribute attr="eventTime">toDateTime($_threatCreatedAt, "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'")</setEventAttribute>
+      <setEventAttribute attr="_ageMs">minus(now(), $eventTime)</setEventAttribute>
+    </when>
+    <when test="not_exist _threatCreatedAt">
+      <when test="exist _createdAt">
+        <setEventAttribute attr="eventTime">toDateTime($_createdAt, "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'")</setEventAttribute>
+        <setEventAttribute attr="_ageMs">minus(now(), $eventTime)</setEventAttribute>
+      </when>
+    </when>
+
+    <!--
+      Step 5: Set msg to the threat name.
+    -->
+    <when test="exist _threatName">
+      <setEventAttribute attr="msg">$_threatName</setEventAttribute>
+    </when>
+
+    <!--
+      Step 6: Resolve source IP (internal/LAN address of the endpoint).
+      Prefer agentDetectionInfo.agentIp; fall back to top-level agentIp.
+    -->
+    <when test="exist _detectAgentIp">
+      <collectFieldsByRegex src="$_detectAgentIp">
+        <regex><![CDATA[<srcIpAddr:gPatIpAddr>]]></regex>
+      </collectFieldsByRegex>
+    </when>
+    <when test="not_exist srcIpAddr">
+      <when test="exist _s1AgentIp">
+        <collectFieldsByRegex src="$_s1AgentIp">
+          <regex><![CDATA[<srcIpAddr:gPatIpAddr>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+    </when>
+
+    <!--
+      Step 7: Resolve destination IP (external/NAT address of the endpoint).
+      Prefer agentDetectionInfo.externalIp; fall back to agentRealtimeInfo.externalIp.
+    -->
+    <when test="exist _detectExternalIp">
+      <collectFieldsByRegex src="$_detectExternalIp">
+        <regex><![CDATA[<destIpAddr:gPatIpAddr>]]></regex>
+      </collectFieldsByRegex>
+    </when>
+    <when test="not_exist destIpAddr">
+      <when test="exist _rtExternalIp">
+        <collectFieldsByRegex src="$_rtExternalIp">
+          <regex><![CDATA[<destIpAddr:gPatIpAddr>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+    </when>
+
+    <!--
+      Step 8: Set procName to the process user context.
+    -->
+    <when test="exist _processUser">
+      <setEventAttribute attr="procName">$_processUser</setEventAttribute>
+    </when>
+
+    <!--
+      Step 9: Map mitigationStatus to numeric eventAction.
+        not_mitigated -> 2  (recognizer guarantees this value)
+        other         -> 0
+    -->
+    <when test="exist _mitigationStatus">
+      <choose>
+        <when test="$_mitigationStatus = 'not_mitigated'">
+          <setEventAttribute attr="eventAction">2</setEventAttribute>
+        </when>
+        <otherwise>
+          <setEventAttribute attr="eventAction">0</setEventAttribute>
+        </otherwise>
+      </choose>
+    </when>
+
+    <!--
+      Step 10: CORE FILTER — 5-day age gate with eventType and eventSeverity.
+
+      LOGIC:
+        incidentStatus = "not_mitigated"  -> guaranteed by eventFormatRecognizer
+        _ageMs <= 432,000,000 ms          -> createdAt is within the last 5 days
+
+      OUTCOMES:
+        Active (within 5 days):
+          eventType    = SentinelOne-Singularity-Threat-<Classification>-not_mitigated
+          eventSeverity = per severity matrix below
+
+        Stale (older than 5 days, but still not_mitigated):
+          eventType    = SentinelOne-Singularity-Threat-Stale
+          eventSeverity = 1
+
+        Age unknown (createdAt absent or unparseable):
+          Treated as Active (conservative; prevents suppression of valid threats).
+    -->
+    <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+
+    <when test="exist _ageMs">
+      <choose>
+
+        <when test="$_ageMs &lt;= 432000000">
+
+          <!-- Active: set eventType from classification. -->
+          <choose>
+            <when test="exist _classification">
+              <setEventAttribute attr="eventType">combineMsgId("SentinelOne-Singularity-Threat-", $_classification, "-not_mitigated")</setEventAttribute>
+            </when>
+            <otherwise>
+              <setEventAttribute attr="eventType">SentinelOne-Singularity-Threat-Generic</setEventAttribute>
+            </otherwise>
+          </choose>
+
+          <!-- Active: set severity from confidenceLevel. -->
+          <when test="exist _confidenceLevel">
+            <choose>
+              <when test="$_confidenceLevel = 'malicious'">
+                <setEventAttribute attr="eventSeverity">9</setEventAttribute>
+              </when>
+              <when test="$_confidenceLevel = 'suspicious'">
+                <setEventAttribute attr="eventSeverity">7</setEventAttribute>
+              </when>
+              <when test="$_confidenceLevel = 'benign'">
+                <setEventAttribute attr="eventSeverity">2</setEventAttribute>
+              </when>
+            </choose>
+          </when>
+
+          <!-- Ransomware override: highest priority — always severity 10. -->
+          <when test="exist _classification">
+            <when test="$_classification = 'Ransomware'">
+              <setEventAttribute attr="eventSeverity">10</setEventAttribute>
+            </when>
+          </when>
+
+        </when>
+
+        <otherwise>
+          <!-- Stale: not_mitigated but detected more than 5 days ago. -->
+          <setEventAttribute attr="eventType">SentinelOne-Singularity-Threat-Stale</setEventAttribute>
+          <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+        </otherwise>
+
+      </choose>
+    </when>
+
+    <!-- Fallback: _ageMs not computed; treat as active (conservative). -->
+    <when test="not_exist _ageMs">
+      <choose>
+        <when test="exist _classification">
+          <setEventAttribute attr="eventType">combineMsgId("SentinelOne-Singularity-Threat-", $_classification, "-not_mitigated")</setEventAttribute>
+        </when>
+        <otherwise>
+          <setEventAttribute attr="eventType">SentinelOne-Singularity-Threat-Generic</setEventAttribute>
+        </otherwise>
+      </choose>
+      <when test="exist _confidenceLevel">
+        <choose>
+          <when test="$_confidenceLevel = 'malicious'">
+            <setEventAttribute attr="eventSeverity">9</setEventAttribute>
+          </when>
+          <when test="$_confidenceLevel = 'suspicious'">
+            <setEventAttribute attr="eventSeverity">7</setEventAttribute>
+          </when>
+          <when test="$_confidenceLevel = 'benign'">
+            <setEventAttribute attr="eventSeverity">2</setEventAttribute>
+          </when>
+        </choose>
+      </when>
+      <when test="exist _classification">
+        <when test="$_classification = 'Ransomware'">
+          <setEventAttribute attr="eventSeverity">10</setEventAttribute>
+        </when>
+      </when>
+    </when>
+
+  </parsingInstructions>
+</eventParser>
