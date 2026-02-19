@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FortiSIEM Custom Event Parser: SentinelOne Singularity
+  =======================================================
+  Vendor  : SentinelOne
+  Model   : Singularity
+  Version : ANY
+
+  FILTER CONDITIONS (both must be satisfied):
+    1. incidentStatus = "not_mitigated"  (enforced in eventFormatRecognizer)
+    2. createdAt is within the last 5 days (432,000,000 ms) (enforced in parsingInstructions)
+
+  INTEGRATION METHOD: Syslog (SENTINELONE_ACTIVITIES JSON payload)
+
+  LOG FORMAT:
+    MMM DD HH:MM:SS YYYY hostname srcIP SENTINELONE_ACTIVITIES: {JSON}
+
+  SAMPLE LOG:
+    Jul 23 00:33:28 2025 yoursubdomain.sentinelone.net 1.1.1.1 SENTINELONE_ACTIVITIES:
+    {"accountId":"2082727357056638789","accountName":"LabAccount","activityType":5232,
+     "incidentStatus":"not_mitigated","createdAt":"2025-07-23T00:27:27.233611Z",...}
+
+  EVENT TYPES PRODUCED:
+    SentinelOne-Singularity-Incident-Not-Mitigated  (severity 8, within 5 days)
+    SentinelOne-Singularity-Incident-Stale          (severity 1, older than 5 days)
+
+  NOTE: Register event types in ADMIN > Device Support > Event Types before use.
+
+  FIELD MAPPINGS (JSON key -> FortiSIEM EAT):
+    accountName              -> customer
+    primaryDescription       -> msg
+    data.computerName        -> srcHostName
+    data.ipAddress           -> srcIpAddr
+    data.reportedRemoteHost  -> destIpAddr
+    data.processName         -> procName
+    data.processId           -> procId
+    data.ruleName            -> policyName
+    data.reportedDirection   -> connMode
+    data.action              -> eventAction  (Block=1, Allow=2, other=0)
+    data.createdByUsername   -> user
+    createdAt                -> eventTime    (ISO 8601 -> DATETIME)
+    syslog header timestamp  -> deviceTime
+-->
+
+<eventParser name="SentinelOneSingularity">
+  <deviceType>
+    <Vendor>SentinelOne</Vendor>
+    <Model>Singularity</Model>
+    <Version>ANY</Version>
+  </deviceType>
+
+  <!-- patternDefinitions: local regex patterns used in parsing instructions -->
+  <patternDefinitions>
+    <!-- SentinelOne ISO 8601 timestamp with microseconds: 2025-07-23T00:27:27.233611Z -->
+    <pattern name="patS1Timestamp"><![CDATA[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z]]></pattern>
+  </patternDefinitions>
+
+  <!--
+    eventFormatRecognizer
+    This parser is selected ONLY when ALL of the following are true in the raw log:
+      1. Syslog header matches: MMM DD HH:MM:SS YYYY hostname IP
+      2. Log body contains the SENTINELONE_ACTIVITIES: tag
+      3. JSON payload contains the exact substring: "incidentStatus":"not_mitigated"
+         (with optional whitespace around the colon)
+
+    The createdAt 5-day age filter is enforced dynamically inside parsingInstructions.
+  -->
+  <eventFormatRecognizer>
+    <![CDATA[<:gPatMon>\s+<:gPatDay>\s+<:gPatTime>\s+<:gPatYear>\s+<:gPatStr>\s+<:gPatIpAddr>\s+SENTINELONE_ACTIVITIES:.*"incidentStatus"\s*:\s*"not_mitigated"]]>
+  </eventFormatRecognizer>
+
+  <parsingInstructions>
+
+    <!--
+      Step 1: Parse syslog header and extract the raw JSON body.
+      Captures: month, day, time, year, hostname, and the full JSON payload.
+      The syslog source IP is auto-available as $reptDevIpAddr (built-in).
+    -->
+    <collectFieldsByRegex src="$_rawmsg">
+      <regex><![CDATA[<_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>\s+<_year:gPatYear>\s+<_devHostname:gPatStr>\s+<:gPatIpAddr>\s+SENTINELONE_ACTIVITIES:\s+<_jsonBody:gPatMesgBody>]]></regex>
+    </collectFieldsByRegex>
+
+    <!--
+      Step 2: Set deviceTime from the syslog header timestamp.
+      toDateTime(month, day, year, time) -> DATETIME
+    -->
+    <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_year, $_time)</setEventAttribute>
+
+    <!--
+      Step 3: Parse all JSON fields from the SENTINELONE_ACTIVITIES payload.
+      Top-level keys are mapped directly.
+      Nested keys under the "data" object use dot notation (e.g. data.computerName).
+      Attributes prefixed with _ are temporary and not persisted to the event store.
+    -->
+    <collectAndSetAttrByJSON src="$_jsonBody">
+
+      <!-- Identity and account fields -->
+      <attrKeyMap attr="_s1AccountId"        key="accountId"/>
+      <attrKeyMap attr="customer"            key="accountName"/>
+      <attrKeyMap attr="_activityType"       key="activityType"/>
+      <attrKeyMap attr="_activityUuid"       key="activityUuid"/>
+      <attrKeyMap attr="_agentId"            key="agentId"/>
+
+      <!-- Filter key (pre-verified by recognizer, captured for reference) -->
+      <attrKeyMap attr="_incidentStatus"     key="incidentStatus"/>
+
+      <!-- Timestamps -->
+      <attrKeyMap attr="_createdAt"          key="createdAt"/>
+      <attrKeyMap attr="_updatedAt"          key="updatedAt"/>
+
+      <!-- Grouping and site -->
+      <attrKeyMap attr="_s1GroupId"          key="groupId"/>
+      <attrKeyMap attr="_s1GroupName"        key="groupName"/>
+      <attrKeyMap attr="_s1SiteId"           key="siteId"/>
+      <attrKeyMap attr="_s1SiteName"         key="siteName"/>
+
+      <!-- Event identifiers -->
+      <attrKeyMap attr="_s1EventId"          key="id"/>
+      <attrKeyMap attr="_s1ThreatId"         key="threatId"/>
+      <attrKeyMap attr="_s1UserId"           key="userId"/>
+      <attrKeyMap attr="_s1OsFamily"         key="osFamily"/>
+
+      <!-- Human-readable descriptions -->
+      <attrKeyMap attr="msg"                 key="primaryDescription"/>
+      <attrKeyMap attr="_secondaryDesc"      key="secondaryDescription"/>
+
+      <!-- Nested data: endpoint context -->
+      <attrKeyMap attr="srcHostName"         key="data.computerName"/>
+      <attrKeyMap attr="_dataIpAddr"         key="data.ipAddress"/>
+      <attrKeyMap attr="procName"            key="data.processName"/>
+      <attrKeyMap attr="_dataProcId"         key="data.processId"/>
+
+      <!-- Nested data: firewall rule -->
+      <attrKeyMap attr="policyName"          key="data.ruleName"/>
+      <attrKeyMap attr="_dataRuleId"         key="data.ruleId"/>
+      <attrKeyMap attr="_dataRuleScopeLevel" key="data.ruleScopeLevel"/>
+      <attrKeyMap attr="_dataRuleScopeName"  key="data.ruleScopeName"/>
+
+      <!-- Nested data: traffic and action -->
+      <attrKeyMap attr="_dataAction"         key="data.action"/>
+      <attrKeyMap attr="_dataDirection"      key="data.direction"/>
+      <attrKeyMap attr="_dataReportedDir"    key="data.reportedDirection"/>
+      <attrKeyMap attr="_dataProtocol"       key="data.protocol"/>
+      <attrKeyMap attr="_dataRemoteHost"     key="data.reportedRemoteHost"/>
+      <attrKeyMap attr="_dataRemotePort"     key="data.reportedRemotePort"/>
+      <attrKeyMap attr="_dataLocalHost"      key="data.reportedLocalHost"/>
+      <attrKeyMap attr="_dataLocalPort"      key="data.reportedLocalPort"/>
+      <attrKeyMap attr="_dataStatus"         key="data.status"/>
+
+      <!-- Nested data: scope and context -->
+      <attrKeyMap attr="_dataFullScope"      key="data.fullScopeDetails"/>
+      <attrKeyMap attr="_dataNumEvents"      key="data.numberOfEvents"/>
+      <attrKeyMap attr="_dataCreatedBy"      key="data.createdByUsername"/>
+    </collectAndSetAttrByJSON>
+
+    <!--
+      Step 4: Set eventTime from the JSON createdAt field.
+      createdAt format: "2025-07-23T00:27:27.233611Z"
+      toDateTime(str, format) -> DATETIME (epoch milliseconds internally).
+
+      _ageMs = now() - eventTime  (difference in milliseconds)
+      5 days = 5 * 24 * 60 * 60 * 1000 = 432,000,000 ms
+    -->
+    <when test="exist _createdAt">
+      <setEventAttribute attr="eventTime">toDateTime($_createdAt, "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'")</setEventAttribute>
+      <setEventAttribute attr="_ageMs">minus(now(), $eventTime)</setEventAttribute>
+    </when>
+
+    <!--
+      Step 5: Resolve source IP address from the data.ipAddress JSON field.
+      Extracts the first valid IPv4 address from the field string value.
+    -->
+    <when test="exist _dataIpAddr">
+      <collectFieldsByRegex src="$_dataIpAddr">
+        <regex><![CDATA[<srcIpAddr:gPatIpAddr>]]></regex>
+      </collectFieldsByRegex>
+    </when>
+
+    <!--
+      Step 6: Resolve destination IP from data.reportedRemoteHost.
+      Extracts the first valid IPv4 address from the field string value.
+    -->
+    <when test="exist _dataRemoteHost">
+      <collectFieldsByRegex src="$_dataRemoteHost">
+        <regex><![CDATA[<destIpAddr:gPatIpAddr>]]></regex>
+      </collectFieldsByRegex>
+    </when>
+
+    <!--
+      Step 7: Convert process ID string to integer (procId is UINT32 in FortiSIEM).
+    -->
+    <when test="exist _dataProcId">
+      <setEventAttribute attr="procId">toInt($_dataProcId)</setEventAttribute>
+    </when>
+
+    <!--
+      Step 8: Set network connection direction from data.reportedDirection.
+      Stores directional string e.g. "outbound", "inbound", "any".
+    -->
+    <when test="exist _dataReportedDir">
+      <setEventAttribute attr="connMode">$_dataReportedDir</setEventAttribute>
+    </when>
+
+    <!--
+      Step 9: Map data.action string to numeric eventAction.
+        Block -> 1  (deny/block)
+        Allow -> 2  (permit/allow)
+        other -> 0  (none/unknown)
+    -->
+    <when test="exist _dataAction">
+      <choose>
+        <when test="$_dataAction = 'Block'">
+          <setEventAttribute attr="eventAction">1</setEventAttribute>
+        </when>
+        <when test="$_dataAction = 'Allow'">
+          <setEventAttribute attr="eventAction">2</setEventAttribute>
+        </when>
+        <otherwise>
+          <setEventAttribute attr="eventAction">0</setEventAttribute>
+        </otherwise>
+      </choose>
+    </when>
+
+    <!--
+      Step 10: Set user from data.createdByUsername.
+    -->
+    <when test="exist _dataCreatedBy">
+      <setEventAttribute attr="user">$_dataCreatedBy</setEventAttribute>
+    </when>
+
+    <!--
+      Step 11: CORE FILTER - 5-day createdAt age gate.
+
+      LOGIC:
+        incidentStatus = "not_mitigated"  -> guaranteed by eventFormatRecognizer
+        _ageMs <= 432,000,000 ms          -> createdAt is within the last 5 days
+
+      OUTCOMES:
+        Active (within 5 days) -> eventType: SentinelOne-Singularity-Incident-Not-Mitigated, severity 8
+        Stale  (older 5+ days) -> eventType: SentinelOne-Singularity-Incident-Stale,          severity 1
+        Age unknown (fallback) -> eventType: SentinelOne-Singularity-Incident-Not-Mitigated, severity 8
+    -->
+    <when test="exist _ageMs">
+      <choose>
+        <when test="$_ageMs &lt;= 432000000">
+          <setEventAttribute attr="eventType">SentinelOne-Singularity-Incident-Not-Mitigated</setEventAttribute>
+          <setEventAttribute attr="eventSeverity">8</setEventAttribute>
+        </when>
+        <otherwise>
+          <setEventAttribute attr="eventType">SentinelOne-Singularity-Incident-Stale</setEventAttribute>
+          <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+        </otherwise>
+      </choose>
+    </when>
+
+    <!-- Fallback: _ageMs could not be computed (createdAt absent or unparseable).
+         incidentStatus was already satisfied by the recognizer, so classify as active. -->
+    <when test="not_exist _ageMs">
+      <setEventAttribute attr="eventType">SentinelOne-Singularity-Incident-Not-Mitigated</setEventAttribute>
+      <setEventAttribute attr="eventSeverity">8</setEventAttribute>
+    </when>
+
+  </parsingInstructions>
+</eventParser>
