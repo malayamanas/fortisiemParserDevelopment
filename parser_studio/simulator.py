@@ -4,37 +4,77 @@ import xml.etree.ElementTree as ET
 from parser_studio.extractor import _flatten_json
 from parser_studio.db import get_parsers
 
+# Complete gPat* built-in pattern library (matches FSM 7.5.0 definitions)
 _GPATTERNS = {
-    "gPatMon":         r'\w{3}|\d{1,2}',
-    "gPatDay":         r'\d{1,2}',
-    "gPatTime":        r'\d{1,2}:\d{1,2}:\d{1,2}',
-    "gPatYear":        r'\d{2,4}',
-    "gPatStr":         r'[^\s]+',
-    "gPatIpAddr":      r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}',
-    "gPatIpPort":      r'\d{1,5}',
-    "gPatInt":         r'\d+',
-    "gPatWord":        r'\w+',
-    "gPatMesgBody":    r'.+',
-    "gPatMesgBodyMin": r'.+?',
-    "gPatHostName":    r'[\w.\-]+',
-    "gPatFqdn":        r'\w+(?:\.\w+)+',
-    "gPatStrDQ":       r'[^"]*',
-    "gPatStrSQ":       r"[^']*",
-    "gPatStrComma":    r'[^,]*',
+    # time
+    "gPatMon":          r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d{1,2})',
+    "gPatMonNum":       r'\d{1,2}',
+    "gPatDay":          r'\d{1,2}',
+    "gPatTime":         r'\d{1,2}:\d{1,2}:\d{1,2}',
+    "gPatTimeMSec":     r'\d{1,2}:\d{1,2}:\d{1,2}\.\d{1,3}',
+    "gPatYear":         r'\d{2,4}',
+    "gPatMSec":         r'\d{1,3}',
+    "gPatTimeZone":     r'(?:Z|UTC|GMT|[+-]\d{1,2}:?\d{2})',
+    "gPatWeekday":      r'(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)',
+    # generic
+    "gPatStr":          r'[^\s]+',
+    "gPatWord":         r'\w+',
+    "gPatInt":          r'\d+',
+    "gPatSentence":     r'\w[\w\s]*',
+    "gPatMesgBody":     r'.+',
+    "gPatMesgBodyMin":  r'.+?',
+    "gPatSpace":        r'\s+',
+    # string-until-delimiter
+    "gPatStrDQ":        r'[^"]*',
+    "gPatStrSQ":        r"[^']*",
+    "gPatStrComma":     r'[^,]*',
+    "gPatStrEndColon":  r'[^:]*',
+    "gPatStrLeftParen": r'[^\(]*',
+    "gPatStrRightSB":   r'[^\]]*',
+    # network
+    "gPatIpAddr":       r'(?:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|[0-9a-fA-F:]{2,39})',
+    "gPatIpV4Dot":      r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}',
+    "gPatIpPort":       r'\d{1,5}',
+    "gPatHostName":     r'[\w.\-]+',
+    "gPatFqdn":         r'\w+(?:\.\w+)+',
+    "gPatProto":        r'(?:ftp|icmp|tcp|udp|http|https|ip|smb|smtp|snmp|ssh|telnet|dns)',
+    # syslog
+    "gPatSyslogPRI":    r'<\d+>',
 }
 
 
-def _fsm_regex_to_python(fsm_pattern: str) -> str:
-    """Convert FSM <attr:gPat> capture syntax to Python named-group regex."""
+def _load_custom_patterns(root: ET.Element) -> dict[str, str]:
+    """Read <patternDefinitions> from the parsed XML root into a name→regex dict."""
+    patterns: dict[str, str] = {}
+    pd = root.find("patternDefinitions")
+    if pd is not None:
+        for p in pd.findall("pattern"):
+            name = p.attrib.get("name")
+            if name and p.text:
+                patterns[name] = p.text.strip()
+    return patterns
+
+
+def _fsm_regex_to_python(fsm_pattern: str,
+                          custom_patterns: dict[str, str] | None = None) -> str:
+    """Convert FSM <attr:gPat> capture syntax to Python named-group regex.
+
+    Resolution order: custom patternDefinitions → built-in _GPATTERNS → r'\\S+'.
+    """
+    cp = custom_patterns or {}
+
     def replace_capture(m):
         attr     = m.group(1)
         pat_name = m.group(2)
-        py_pat   = _GPATTERNS.get(pat_name, r'\S+')
+        if pat_name in cp:
+            py_pat = cp[pat_name]
+        else:
+            py_pat = _GPATTERNS.get(pat_name, r'\S+')
         if attr:
-            # Sanitise attr name: replace non-word chars with underscores
             safe = re.sub(r'\W', '_', attr)
             return f'(?P<{safe}>{py_pat})'
         return f'(?:{py_pat})'
+
     return re.sub(r'<([^:>]*):(\w+)>', replace_capture, fsm_pattern)
 
 
@@ -70,12 +110,13 @@ def _recognizer_matches(xml_str: str, raw: str) -> bool:
     root = _parse_fragment(xml_str)
     if root is None:
         return False
+    custom = _load_custom_patterns(root)
     rec_elem = root.find("eventFormatRecognizer")
     if rec_elem is None:
         return False
     rec_text = (rec_elem.text or "").strip()
     try:
-        py_pat = _fsm_regex_to_python(rec_text)
+        py_pat = _fsm_regex_to_python(rec_text, custom)
         return bool(re.search(py_pat, raw, re.DOTALL | re.IGNORECASE))
     except re.error:
         # Fall back: strip capture groups and treat as literal substring
@@ -125,6 +166,12 @@ def _eval_test(test: str, attrs: dict) -> bool:
          lambda m: attrs.get(m.group(1), "") != m.group(2)),
         (r'^\$(\S+)\s+IN\s+[\'"](.+)[\'"]$',
          lambda m: attrs.get(m.group(1), "") in [v.strip() for v in m.group(2).split(',')]),
+        (r'^matches\(\$(\S+),\s*"(.+)"\)$',
+         lambda m: bool(re.search(m.group(2), attrs.get(m.group(1), "")))),
+        (r"^matches\(\$(\S+),\s*'(.+)'\)$",
+         lambda m: bool(re.search(m.group(2), attrs.get(m.group(1), "")))),
+        (r'^not_matches\(\$(\S+),\s*"(.+)"\)$',
+         lambda m: not bool(re.search(m.group(2), attrs.get(m.group(1), "")))),
     ]
     for pat, fn in patterns:
         hit = re.match(pat, test)
@@ -133,21 +180,23 @@ def _eval_test(test: str, attrs: dict) -> bool:
     return False
 
 
-def _simulate_one(instructions_elem: ET.Element, raw: str) -> dict:
+def _simulate_one(instructions_elem: ET.Element, raw: str,
+                  custom: dict[str, str] | None = None) -> dict:
     """Walk parsingInstructions XML and simulate each step. Returns attrs dict."""
+    cp = custom or {}
     attrs: dict[str, str] = {"_rawmsg": raw}
 
     for elem in instructions_elem:
         tag = elem.tag
 
-        if tag == "collectFieldsByRegex":
+        if tag in ("collectFieldsByRegex", "collectAndSetAttrByRegex"):
             src_key = elem.attrib.get("src", "$_rawmsg").lstrip('$')
             src_val = attrs.get(src_key, raw)
             regex_elem = elem.find("regex")
             if regex_elem is not None and regex_elem.text:
                 try:
                     m = re.search(
-                        _fsm_regex_to_python(regex_elem.text.strip()),
+                        _fsm_regex_to_python(regex_elem.text.strip(), cp),
                         src_val, re.DOTALL
                     )
                     if m:
@@ -187,7 +236,7 @@ def _simulate_one(instructions_elem: ET.Element, raw: str) -> dict:
             if _eval_test(elem.attrib.get("test", ""), attrs):
                 wrapper = ET.Element("p")
                 wrapper.extend(list(elem))
-                attrs.update(_simulate_one(wrapper, raw))
+                attrs.update(_simulate_one(wrapper, raw, cp))
 
         elif tag == "choose":
             matched = False
@@ -197,27 +246,11 @@ def _simulate_one(instructions_elem: ET.Element, raw: str) -> dict:
                         matched = True
                         wrapper = ET.Element("p")
                         wrapper.extend(list(child))
-                        attrs.update(_simulate_one(wrapper, raw))
+                        attrs.update(_simulate_one(wrapper, raw, cp))
                 elif child.tag == "otherwise" and not matched:
                     wrapper = ET.Element("p")
                     wrapper.extend(list(child))
-                    attrs.update(_simulate_one(wrapper, raw))
-
-        elif tag == "collectAndSetAttrByRegex":
-            # Treat identically to collectFieldsByRegex
-            src_key = elem.attrib.get("src", "$_rawmsg").lstrip('$')
-            src_val = attrs.get(src_key, raw)
-            regex_elem = elem.find("regex")
-            if regex_elem is not None and regex_elem.text:
-                try:
-                    m = re.search(
-                        _fsm_regex_to_python(regex_elem.text.strip()),
-                        src_val, re.DOTALL
-                    )
-                    if m:
-                        attrs.update({k: v or "" for k, v in m.groupdict().items()})
-                except re.error:
-                    pass
+                    attrs.update(_simulate_one(wrapper, raw, cp))
 
         elif tag == "switch":
             # Try each case in order; commit the first whose regex matches.
@@ -236,17 +269,17 @@ def _simulate_one(instructions_elem: ET.Element, raw: str) -> dict:
                     continue
                 try:
                     m = re.search(
-                        _fsm_regex_to_python(regex_elem.text.strip()),
+                        _fsm_regex_to_python(regex_elem.text.strip(), cp),
                         src_val, re.DOTALL
                     )
                     if m:
                         attrs.update({k: v or "" for k, v in m.groupdict().items()})
-                        # Also run any other elements inside this case
+                        # Run remaining elements inside the matched case
                         for sibling in child:
                             if sibling is not cfr:
                                 wrapper = ET.Element("p")
                                 wrapper.append(sibling)
-                                attrs.update(_simulate_one(wrapper, raw))
+                                attrs.update(_simulate_one(wrapper, raw, cp))
                         break  # first match wins
                 except re.error:
                     pass
@@ -273,6 +306,8 @@ def simulate(xml_str: str, samples: list[str]) -> list[dict]:
         return [{"fields": {}, "status": "fail", "error": "Invalid XML"}
                 for _ in samples]
 
+    custom = _load_custom_patterns(root)
+
     instructions = root.find("parsingInstructions")
     if instructions is None:
         return [{"fields": {}, "status": "fail", "error": "No parsingInstructions"}
@@ -280,7 +315,7 @@ def simulate(xml_str: str, samples: list[str]) -> list[dict]:
 
     results = []
     for raw in samples:
-        attrs  = _simulate_one(instructions, raw)
+        attrs  = _simulate_one(instructions, raw, custom)
         public = {k: v for k, v in attrs.items() if not k.startswith("_")}
         status = "pass" if public.get("eventType") else "fail"
         results.append({"fields": public, "status": status})
