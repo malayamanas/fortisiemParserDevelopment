@@ -32,7 +32,7 @@ from parser_studio.importer import sync_parsers
 import xml.etree.ElementTree as ET
 
 DB_PATH      = os.environ.get("PARSER_STUDIO_DB", "parser_studio.db")
-PARSERS_DIR  = "parsers"
+PARSERS_DIR  = "."
 
 app = Flask(__name__, template_folder="parser_studio/templates",
             static_folder="parser_studio/static")

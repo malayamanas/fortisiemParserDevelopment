@@ -355,9 +355,110 @@
     </div>
   </div>
 
+  <!-- ADD PARSER MODAL -->
+  <div class="modal-overlay" x-show="showAddModal" @click.self="showAddModal = false">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h3>Add Parser</h3>
+        <button @click="showAddModal = false" class="btn btn-sm">&#10005;</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Metadata -->
+        <div class="form-grid" style="margin-bottom:1rem">
+          <label>Name
+            <input type="text" x-model="addParser.name" placeholder="MyParser"/>
+          </label>
+          <label>Scope
+            <select x-model="addParser.scope">
+              <option value="enabled">Enabled</option>
+              <option value="disabled">Disabled</option>
+            </select>
+          </label>
+          <label>Device Type
+            <input type="text" x-model="addParser.vendor" placeholder="e.g. Fortinet FortiOS"/>
+          </label>
+          <label>Model
+            <input type="text" x-model="addParser.model" placeholder="e.g. FortiOS"/>
+          </label>
+          <label>Version
+            <input type="text" x-model="addParser.version" placeholder="ANY"/>
+          </label>
+        </div>
+
+        <!-- XML editor -->
+        <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Parser XML</label>
+        <textarea x-model="addParser.xml_content" rows="16"
+                  placeholder="Paste FortiSIEM &lt;eventParser&gt; XML here..."
+                  style="font-family:monospace;font-size:.8rem;width:100%;
+                         padding:.5rem;border:1px solid #d1d5db;border-radius:6px;
+                         margin-bottom:1rem;resize:vertical"></textarea>
+
+        <!-- Toolbar -->
+        <div class="modal-toolbar">
+          <button @click="validateAdd()" class="btn btn-secondary">Validate</button>
+          <button @click="runAddTest()" class="btn btn-secondary" :disabled="addTesting">
+            <span x-text="addTesting ? 'Testing...' : 'Run Test'"></span>
+          </button>
+          <button @click="saveAdd()" class="btn btn-primary">Save</button>
+          <span x-show="addValidateResult !== null"
+                :class="addValidateResult ? 'badge badge-ok' : 'badge badge-err'"
+                x-text="addValidateResult ? '\u2713 Valid XML' : '\u2717 ' + addValidateError"></span>
+        </div>
+
+        <!-- Test results -->
+        <template x-if="addTestResults.length > 0">
+          <div style="margin-top:1rem">
+            <template x-for="(result, i) in addTestResults" :key="i">
+              <div class="test-result">
+                <h4>
+                  <span x-text="'Sample ' + (i+1)"></span>
+                  <span :class="result.status === 'pass' ? 'badge badge-ok' : 'badge badge-err'"
+                        x-text="result.status === 'pass' ? 'PASS' : 'FAIL'"></span>
+                </h4>
+                <table class="result-table">
+                  <thead><tr><th>EAT</th><th>Value</th></tr></thead>
+                  <tbody>
+                    <template x-for="[k, v] in Object.entries(result.fields)" :key="k">
+                      <tr><td x-text="k"></td><td class="mono" x-text="v"></td></tr>
+                    </template>
+                    <tr x-show="Object.keys(result.fields).length === 0">
+                      <td colspan="2" class="hint">No fields extracted.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- Test samples -->
+        <div style="margin-top:1rem">
+          <div style="font-weight:600;font-size:.875rem;margin-bottom:.5rem">
+            Test Samples
+            <button @click="addSamples.push('')" class="btn btn-sm" style="margin-left:.5rem">+ Add</button>
+          </div>
+          <template x-for="(s, i) in addSamples" :key="i">
+            <div class="sample-block">
+              <div class="sample-header">
+                <span x-text="'Sample ' + (i+1)"></span>
+                <button x-show="addSamples.length > 1" @click="addSamples.splice(i,1)"
+                        class="btn btn-danger btn-sm">&#10005;</button>
+              </div>
+              <textarea x-model="addSamples[i]" rows="2" placeholder="Paste raw log line here..."></textarea>
+            </div>
+          </template>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- PARSER LIBRARY -->
   <section class="panel">
-    <h2>Parser Library</h2>
+    <h2>Parser Library
+      <button @click="openAddModal()" class="btn btn-sm btn-primary" style="margin-left:.75rem">+ Add Parser</button>
+    </h2>
     <table class="library-table">
       <thead><tr><th>Name</th><th>Device Type</th><th>Model</th><th>Source</th><th>Actions</th></tr></thead>
       <tbody>
@@ -426,6 +527,15 @@ function studioApp() {
     editValidateError: '',
     editTestResults: [],
     editTesting: false,
+
+    // Add Parser modal
+    showAddModal: false,
+    addParser: { name: '', scope: 'enabled', vendor: '', model: '', version: 'ANY', xml_content: '' },
+    addSamples: [''],
+    addValidateResult: null,
+    addValidateError: '',
+    addTestResults: [],
+    addTesting: false,
 
     async init() {
       await this.loadDeviceTypes();
@@ -621,6 +731,72 @@ function studioApp() {
       } catch (e) {
         alert(`Test failed: ${e.message}`);
       } finally { this.editTesting = false; }
+    },
+
+    openAddModal() {
+      this.addParser = { name: '', scope: 'enabled', vendor: '', model: '', version: 'ANY', xml_content: '' };
+      this.addSamples = [''];
+      this.addValidateResult = null;
+      this.addValidateError = '';
+      this.addTestResults = [];
+      this.addTesting = false;
+      this.showAddModal = true;
+    },
+
+    async saveAdd() {
+      if (!this.addParser.name.trim()) { alert('Name is required.'); return; }
+      if (!this.addParser.xml_content.trim()) { alert('XML is required.'); return; }
+      try {
+        const res = await fetch('/api/parsers/save', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            name:        this.addParser.name,
+            scope:       this.addParser.scope,
+            parser_type: 'User',
+            vendor:      this.addParser.vendor,
+            model:       this.addParser.model,
+            version:     this.addParser.version,
+            xml:         this.addParser.xml_content,
+            samples:     this.addSamples.filter(s => s.trim()),
+          }),
+        });
+        if (!res.ok) { alert(`Save failed: ${res.status}`); return; }
+        this.showAddModal = false;
+        await this.loadParserLibrary();
+      } catch (e) {
+        alert(`Save failed: ${e.message}`);
+      }
+    },
+
+    async validateAdd() {
+      const res = await fetch('/api/validate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ xml: this.addParser.xml_content }),
+      });
+      const data = await res.json();
+      this.addValidateResult = data.valid;
+      this.addValidateError = data.error || '';
+    },
+
+    async runAddTest() {
+      this.addTesting = true;
+      this.addTestResults = [];
+      try {
+        const samples = this.addSamples.filter(s => s.trim());
+        if (!samples.length) { alert('Add at least one sample log line.'); return; }
+        if (!this.addParser.xml_content.trim()) { alert('Paste parser XML first.'); return; }
+        const res = await fetch('/api/test', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ xml: this.addParser.xml_content, samples }),
+        });
+        const data = await res.json();
+        this.addTestResults = data.results || [];
+      } catch (e) {
+        alert(`Test failed: ${e.message}`);
+      } finally { this.addTesting = false; }
     },
   };
 }
