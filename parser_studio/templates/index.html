@@ -469,14 +469,25 @@
     <h2>Parser Library
       <button @click="openAddModal()" class="btn btn-sm btn-primary" style="margin-left:.75rem">+ Add Parser</button>
     </h2>
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem">
+      <label style="font-size:.875rem;font-weight:600;margin:0">Scope:</label>
+      <select x-model="scopeFilter" style="font-size:.875rem;padding:.25rem .5rem;border:1px solid #d1d5db;border-radius:6px">
+        <option value="all">All</option>
+        <option value="enabled">Enabled</option>
+        <option value="disabled">Disabled</option>
+      </select>
+      <span style="font-size:.8rem;color:#6b7280"
+            x-text="(scopeFilter === 'all' ? parserLibrary : parserLibrary.filter(p => p.scope === scopeFilter)).length + ' parser(s)'"></span>
+    </div>
     <table class="library-table">
-      <thead><tr><th>Name</th><th>Device Type</th><th>Model</th><th>Source</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Device Type</th><th>Model</th><th>Scope</th><th>Source</th><th>Actions</th></tr></thead>
       <tbody>
-        <template x-for="p in parserLibrary" :key="p.id">
+        <template x-for="p in (scopeFilter === 'all' ? parserLibrary : parserLibrary.filter(p => p.scope === scopeFilter))" :key="p.id">
           <tr>
             <td x-text="p.name"></td>
             <td x-text="p.vendor"></td>
             <td x-text="p.model"></td>
+            <td><span :class="p.scope === 'enabled' ? 'badge badge-ok' : 'badge badge-err'" x-text="p.scope"></span></td>
             <td><span class="badge" x-text="p.source"></span></td>
             <td style="display:flex;gap:.4rem">
               <button @click="openEditModal(p.id)" class="btn btn-sm btn-secondary">Edit</button>
@@ -528,6 +539,7 @@ function studioApp() {
 
     // Parser library
     parserLibrary: [],
+    scopeFilter: 'all',
 
     // Edit modal
     showEditModal: false,
