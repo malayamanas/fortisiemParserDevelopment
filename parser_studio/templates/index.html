@@ -671,6 +671,7 @@ function studioApp() {
     // AI EAT suggestion
     aiSuggestAvailable: false,
     aiSuggesting: {},
+    _aiReasons: {},
 
     // Mappings
     confirmedMappings: {},
@@ -755,7 +756,7 @@ function studioApp() {
         const data = await res.json();
         if (data.eat) {
           this.confirmedMappings[field] = data.eat;
-          if (data.reason) this._aiReasons = {...(this._aiReasons||{}), [field]: data.reason};
+          if (data.reason) this._aiReasons = {...this._aiReasons, [field]: data.reason};
         }
       } catch (e) {
         console.error('AI suggest failed:', e);

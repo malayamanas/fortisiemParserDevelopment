@@ -285,9 +285,6 @@ def api_eat_names():
 
 def _claude_binary() -> str | None:
     """Return path to the claude CLI binary, or None if unavailable."""
-    # Refuse to nest inside an active Claude Code session
-    if os.environ.get("CLAUDECODE") or os.environ.get("CLAUDE_CODE_ENTRYPOINT"):
-        return None
     return shutil.which("claude")
 
 
