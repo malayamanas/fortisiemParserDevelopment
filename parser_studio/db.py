@@ -99,6 +99,16 @@ def get_parser_by_id(db_path: str, parser_id: int) -> dict | None:
         row = conn.execute("SELECT * FROM parsers WHERE id=?", (parser_id,)).fetchone()
         return dict(row) if row else None
 
+def update_parser(db_path: str, parser_id: int, data: dict) -> None:
+    with _conn(db_path) as conn:
+        conn.execute(
+            """UPDATE parsers
+               SET name=:name, scope=:scope, vendor=:vendor, model=:model,
+                   version=:version, xml_content=:xml_content
+               WHERE id=:id""",
+            {**data, "id": parser_id}
+        )
+
 def save_samples(db_path: str, parser_id: int, samples: list[dict]) -> None:
     with _conn(db_path) as conn:
         conn.execute("DELETE FROM test_samples WHERE parser_id=?", (parser_id,))

@@ -45,3 +45,22 @@ def test_get_parser_by_id(tmp_db):
     p = get_parser_by_id(tmp_db, pid)
     assert p["name"] == "TestParser"
     assert p["xml_content"] == "<eventParser/>"
+
+def test_update_parser(tmp_db):
+    from parser_studio.db import update_parser
+    init_db(tmp_db)
+    pid = save_parser(tmp_db, {
+        "name": "Original", "scope": "enabled", "parser_type": "User",
+        "vendor": "A", "model": "B", "version": "ANY",
+        "xml_content": "<old/>", "source": "studio", "file_path": None,
+    })
+    update_parser(tmp_db, pid, {
+        "name": "Updated", "scope": "disabled",
+        "vendor": "X", "model": "Y", "version": "2.0",
+        "xml_content": "<new/>",
+    })
+    p = get_parser_by_id(tmp_db, pid)
+    assert p["name"] == "Updated"
+    assert p["scope"] == "disabled"
+    assert p["vendor"] == "X"
+    assert p["xml_content"] == "<new/>"
