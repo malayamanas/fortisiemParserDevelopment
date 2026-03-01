@@ -417,9 +417,6 @@
 
         <!-- Toolbar -->
         <div class="modal-toolbar">
-          <button @click="generateAdd()" class="btn btn-secondary" :disabled="addGenerating">
-            <span x-text="addGenerating ? 'Generating...' : '\u2728 Generate XML'"></span>
-          </button>
           <button @click="validateAdd()" class="btn btn-secondary">Validate</button>
           <button @click="runAddTest()" class="btn btn-secondary" :disabled="addTesting">
             <span x-text="addTesting ? 'Testing...' : 'Run Test'"></span>
@@ -573,7 +570,6 @@ function studioApp() {
     addValidateError: '',
     addTestResults: [],
     addTesting: false,
-    addGenerating: false,
     addFilteredModels: [],
 
     get addCanEnable() {
@@ -799,7 +795,6 @@ function studioApp() {
       this.addValidateError = '';
       this.addTestResults = [];
       this.addTesting = false;
-      this.addGenerating = false;
       this.addFilteredModels = [];
       this.showAddModal = true;
     },
@@ -860,46 +855,6 @@ function studioApp() {
       } finally { this.addTesting = false; }
     },
 
-    async generateAdd() {
-      const samples = this.addSamples.filter(s => s.trim());
-      if (!samples.length) { alert('Add at least one sample log line.'); return; }
-      this.addGenerating = true;
-      this.addValidateResult = null;
-      this.addTestResults = [];
-      try {
-        const analyzeRes = await fetch('/api/analyze', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ samples }),
-        });
-        const analyzeData = await analyzeRes.json();
-        if (analyzeData.error) { alert('Analyze failed: ' + analyzeData.error); return; }
-        const mappings = {};
-        for (const [field, sugs] of Object.entries(analyzeData.mappings)) {
-          if (sugs[0]?.eat && sugs[0].eat !== '_skip') mappings[field] = sugs[0].eat;
-        }
-        const genRes = await fetch('/api/generate', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            meta: {
-              name:    this.addParser.name || 'CustomParser',
-              vendor:  this.addParser.vendor,
-              model:   this.addParser.model,
-              version: this.addParser.version || 'ANY',
-              anchor:  '',
-            },
-            mappings,
-            format:  analyzeData.format,
-            samples,
-          }),
-        });
-        const genData = await genRes.json();
-        this.addParser.xml_content = genData.xml;
-      } catch (e) {
-        alert('Generate failed: ' + e.message);
-      } finally { this.addGenerating = false; }
-    },
   };
 }
 </script>
