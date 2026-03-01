@@ -2,6 +2,7 @@ import os, shutil, pytest
 from parser_studio.db import init_db, get_parsers
 from parser_studio.importer import sync_parsers
 
+# Complete <eventParser> document
 SAMPLE_XML = '''<?xml version="1.0" encoding="UTF-8"?>
 <eventParser name="TestImport">
   <deviceType>
@@ -12,6 +13,15 @@ SAMPLE_XML = '''<?xml version="1.0" encoding="UTF-8"?>
   <eventFormatRecognizer><![CDATA[TEST_ANCHOR]]></eventFormatRecognizer>
   <parsingInstructions></parsingInstructions>
 </eventParser>'''
+
+# <patternDefinitions> fragment (no <eventParser> wrapper)
+SAMPLE_FRAGMENT = '''<patternDefinitions>
+  <pattern name="patFoo"><![CDATA[\\w+]]></pattern>
+</patternDefinitions>
+<eventFormatRecognizer><![CDATA[FRAG_ANCHOR]]></eventFormatRecognizer>
+<parsingInstructions>
+  <setEventAttribute attr="eventType">Frag-Event</setEventAttribute>
+</parsingInstructions>'''
 
 def test_sync_imports_xml_files(tmp_path, tmp_db):
     parsers_dir = tmp_path / "parsers"
@@ -54,3 +64,27 @@ def test_sync_extracts_vendor_model(tmp_path, tmp_db):
     assert p["vendor"] == "TestVendor"
     assert p["model"] == "TestModel"
     assert p["source"] == "imported"
+
+def test_sync_stores_fragment_not_wrapper(tmp_path, tmp_db):
+    """xml_content should NOT include the <eventParser> wrapper or <deviceType>."""
+    parsers_dir = tmp_path / "parsers"
+    parsers_dir.mkdir()
+    (parsers_dir / "TestImport.xml").write_text(SAMPLE_XML)
+    init_db(tmp_db)
+    sync_parsers(str(parsers_dir), tmp_db)
+    p = next(p for p in get_parsers(tmp_db) if p["name"] == "TestImport")
+    assert "<eventParser" not in p["xml_content"]
+    assert "<deviceType>" not in p["xml_content"]
+    assert "eventFormatRecognizer" in p["xml_content"]
+
+def test_sync_imports_fragment_files(tmp_path, tmp_db):
+    """Files starting with <patternDefinitions> (no wrapper) should be importable."""
+    parsers_dir = tmp_path / "parsers"
+    parsers_dir.mkdir()
+    (parsers_dir / "FragParser.xml").write_text(SAMPLE_FRAGMENT)
+    init_db(tmp_db)
+    count = sync_parsers(str(parsers_dir), tmp_db)
+    assert count == 1
+    p = next(p for p in get_parsers(tmp_db) if p["name"] == "FragParser")
+    assert "<patternDefinitions>" in p["xml_content"]
+    assert p["vendor"] == "Unknown"   # fragment has no metadata

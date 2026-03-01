@@ -38,11 +38,37 @@ def _fsm_regex_to_python(fsm_pattern: str) -> str:
     return re.sub(r'<([^:>]*):(\w+)>', replace_capture, fsm_pattern)
 
 
+def _parse_fragment(xml_str: str) -> ET.Element | None:
+    """
+    Parse xml_str into an ET.Element.
+
+    Accepts two formats:
+    - Complete <eventParser>…</eventParser> document
+    - <patternDefinitions>…<parsingInstructions>…  fragment (no wrapper)
+
+    For the fragment case the content is wrapped in a temporary <eventParser>
+    element so that ET can parse it and callers can use .find() uniformly.
+    """
+    stripped = xml_str.strip()
+    # Strip leading XML comments / processing instructions to detect root tag
+    candidate = re.sub(r'^(<\?[^?]*\?>|<!--.*?-->)\s*', '', stripped,
+                       flags=re.DOTALL).strip()
+    if candidate.startswith('<eventParser'):
+        try:
+            return ET.fromstring(stripped)
+        except ET.ParseError:
+            return None
+    # Fragment: wrap so ET can parse multiple sibling elements
+    try:
+        return ET.fromstring(f'<eventParser>{stripped}</eventParser>')
+    except ET.ParseError:
+        return None
+
+
 def _recognizer_matches(xml_str: str, raw: str) -> bool:
     """Return True if this parser's eventFormatRecognizer matches the raw log."""
-    try:
-        root = ET.fromstring(xml_str)
-    except ET.ParseError:
+    root = _parse_fragment(xml_str)
+    if root is None:
         return False
     rec_elem = root.find("eventFormatRecognizer")
     if rec_elem is None:
@@ -191,10 +217,11 @@ def simulate(xml_str: str, samples: list[str]) -> list[dict]:
       "fields": {eat: value, ...},   # public EATs (no _ prefix)
       "status": "pass" | "fail",     # pass = eventType present
     }
+    Accepts both a complete <eventParser> document and a
+    <patternDefinitions>…  fragment (see _parse_fragment).
     """
-    try:
-        root = ET.fromstring(xml_str)
-    except ET.ParseError:
+    root = _parse_fragment(xml_str)
+    if root is None:
         return [{"fields": {}, "status": "fail", "error": "Invalid XML"}
                 for _ in samples]
 

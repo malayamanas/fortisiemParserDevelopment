@@ -32,7 +32,7 @@ from parser_studio.importer import sync_parsers
 import xml.etree.ElementTree as ET
 
 DB_PATH      = os.environ.get("PARSER_STUDIO_DB", "parser_studio.db")
-PARSERS_DIR  = "."
+PARSERS_DIRS = [".", "parsers"]   # "." = complete <eventParser> files; "parsers/" = fragments
 
 app = Flask(__name__, template_folder="parser_studio/templates",
             static_folder="parser_studio/static")
@@ -44,8 +44,9 @@ def startup():
     if not hasattr(app, "_started"):
         init_db(DB_PATH)
         sync_device_types(DB_PATH, _load_device_types_from_file())
-        if os.path.isdir(PARSERS_DIR):
-            sync_parsers(PARSERS_DIR, DB_PATH)
+        for d in PARSERS_DIRS:
+            if os.path.isdir(d):
+                sync_parsers(d, DB_PATH)
         app._started = True
 
 
@@ -108,9 +109,12 @@ def api_generate():
 @app.route("/api/validate", methods=["POST"])
 def api_validate():
     data    = request.get_json(force=True)
-    xml_str = data.get("xml", "")
+    xml_str = (data.get("xml") or "").strip()
+    # Accept both a complete <eventParser> document and a <patternDefinitions> fragment
+    to_parse = (xml_str if xml_str.startswith("<eventParser")
+                else f"<eventParser>{xml_str}</eventParser>")
     try:
-        ET.fromstring(xml_str)
+        ET.fromstring(to_parse)
         return jsonify({"valid": True})
     except ET.ParseError as e:
         return jsonify({"valid": False, "error": str(e)})
@@ -210,9 +214,21 @@ def api_download_parser(pid: int):
     p = get_parser_by_id(DB_PATH, pid)
     if not p:
         return jsonify({"error": "Not found"}), 404
+    # Reconstruct the full <eventParser> document from stored metadata + fragment
+    full_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        f'<eventParser name="{p["name"]}">\n'
+        '  <deviceType>\n'
+        f'    <Vendor>{p["vendor"] or "Unknown"}</Vendor>\n'
+        f'    <Model>{p["model"] or "Unknown"}</Model>\n'
+        f'    <Version>{p["version"] or "ANY"}</Version>\n'
+        '  </deviceType>\n'
+        f'{p["xml_content"] or ""}\n'
+        '</eventParser>\n'
+    )
     fname = f"{p['name']}.xml"
     return send_file(
-        io.BytesIO(p["xml_content"].encode()),
+        io.BytesIO(full_xml.encode()),
         mimetype="application/xml",
         as_attachment=True,
         download_name=fname,
@@ -223,9 +239,7 @@ def api_download_parser(pid: int):
 
 @app.route("/api/parsers/sync", methods=["POST"])
 def api_sync_parsers():
-    if not os.path.isdir(PARSERS_DIR):
-        return jsonify({"imported": 0})
-    count = sync_parsers(PARSERS_DIR, DB_PATH)
+    count = sum(sync_parsers(d, DB_PATH) for d in PARSERS_DIRS if os.path.isdir(d))
     return jsonify({"imported": count})
 
 

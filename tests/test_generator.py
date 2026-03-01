@@ -13,22 +13,31 @@ BASIC_MAPPINGS = {
     "action": "eventAction",
 }
 
-def test_generates_valid_xml():
-    xml_str = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", [])
-    # Must parse without error
-    ET.fromstring(xml_str)
 
-def test_has_event_parser_root():
-    xml_str = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", [])
-    root = ET.fromstring(xml_str)
-    assert root.tag == "eventParser"
-    assert root.attrib["name"] == "TestParser"
+def _wrap(fragment: str) -> ET.Element:
+    """Wrap a parser fragment in <eventParser> so ET can parse it."""
+    return ET.fromstring(f"<eventParser>{fragment}</eventParser>")
 
-def test_has_device_type():
+
+def test_generates_parseable_fragment():
+    """Generated output must be parseable when wrapped in <eventParser>."""
     xml_str = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", [])
-    root = ET.fromstring(xml_str)
-    vendor = root.find(".//Vendor")
-    assert vendor is not None and vendor.text == "Acme"
+    root = _wrap(xml_str)   # must not raise
+    assert root is not None
+
+def test_fragment_has_pattern_definitions():
+    xml_str = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", [])
+    assert "<patternDefinitions>" in xml_str
+
+def test_fragment_has_no_event_parser_wrapper():
+    xml_str = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", [])
+    assert "<eventParser" not in xml_str
+
+def test_fragment_has_no_device_type():
+    """Metadata is stored in DB columns, not in the XML fragment."""
+    xml_str = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", [])
+    assert "<Vendor>" not in xml_str
+    assert "<deviceType>" not in xml_str
 
 def test_json_format_uses_correct_extraction():
     xml_str = generate_parser(BASIC_META, {"threatName": "msg"}, "syslog+json", [])
