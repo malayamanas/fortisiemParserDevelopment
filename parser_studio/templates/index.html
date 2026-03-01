@@ -257,6 +257,104 @@
     </div>
   </div>
 
+  <!-- EDIT MODAL -->
+  <div class="modal-overlay" x-show="showEditModal" @click.self="showEditModal = false">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h3>Edit Parser: <span x-text="editParser.name"></span></h3>
+        <button @click="showEditModal = false" class="btn btn-sm">&#10005;</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Metadata -->
+        <div class="form-grid" style="margin-bottom:1rem">
+          <label>Name
+            <input type="text" x-model="editParser.name"/>
+          </label>
+          <label>Scope
+            <select x-model="editParser.scope">
+              <option value="enabled">Enabled</option>
+              <option value="disabled">Disabled</option>
+            </select>
+          </label>
+          <label>Vendor
+            <input type="text" x-model="editParser.vendor"/>
+          </label>
+          <label>Model
+            <input type="text" x-model="editParser.model"/>
+          </label>
+          <label>Version
+            <input type="text" x-model="editParser.version"/>
+          </label>
+        </div>
+
+        <!-- XML editor -->
+        <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Parser XML</label>
+        <textarea x-model="editParser.xml_content" rows="16"
+                  style="font-family:monospace;font-size:.8rem;width:100%;
+                         padding:.5rem;border:1px solid #d1d5db;border-radius:6px;
+                         margin-bottom:1rem;resize:vertical"></textarea>
+
+        <!-- Toolbar -->
+        <div class="modal-toolbar">
+          <button @click="validateEdit()" class="btn btn-secondary">Validate</button>
+          <button @click="runEditTest()" class="btn btn-secondary" :disabled="editTesting">
+            <span x-text="editTesting ? 'Testing...' : 'Run Test'"></span>
+          </button>
+          <button @click="saveEdit()" class="btn btn-primary">Save</button>
+          <span x-show="editValidateResult !== null"
+                :class="editValidateResult ? 'badge badge-ok' : 'badge badge-err'"
+                x-text="editValidateResult ? '\u2713 Valid XML' : '\u2717 ' + editValidateError"></span>
+        </div>
+
+        <!-- Test results -->
+        <template x-if="editTestResults.length > 0">
+          <div style="margin-top:1rem">
+            <template x-for="(result, i) in editTestResults" :key="i">
+              <div class="test-result">
+                <h4>
+                  <span x-text="'Sample ' + (i+1)"></span>
+                  <span :class="result.status === 'pass' ? 'badge badge-ok' : 'badge badge-err'"
+                        x-text="result.status === 'pass' ? 'PASS' : 'FAIL'"></span>
+                </h4>
+                <table class="result-table">
+                  <thead><tr><th>EAT</th><th>Value</th></tr></thead>
+                  <tbody>
+                    <template x-for="[k, v] in Object.entries(result.fields)" :key="k">
+                      <tr><td x-text="k"></td><td class="mono" x-text="v"></td></tr>
+                    </template>
+                    <tr x-show="Object.keys(result.fields).length === 0">
+                      <td colspan="2" class="hint">No fields extracted.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- Test samples -->
+        <div style="margin-top:1rem">
+          <div style="font-weight:600;font-size:.875rem;margin-bottom:.5rem">
+            Test Samples
+            <button @click="editSamples.push('')" class="btn btn-sm" style="margin-left:.5rem">+ Add</button>
+          </div>
+          <template x-for="(s, i) in editSamples" :key="i">
+            <div class="sample-block">
+              <div class="sample-header">
+                <span x-text="'Sample ' + (i+1)"></span>
+                <button x-show="editSamples.length > 1" @click="editSamples.splice(i,1)"
+                        class="btn btn-danger btn-sm">&#10005;</button>
+              </div>
+              <textarea x-model="editSamples[i]" rows="2"></textarea>
+            </div>
+          </template>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- PARSER LIBRARY -->
   <section class="panel">
     <h2>Parser Library</h2>
@@ -269,7 +367,8 @@
             <td x-text="p.vendor"></td>
             <td x-text="p.model"></td>
             <td><span class="badge" x-text="p.source"></span></td>
-            <td>
+            <td style="display:flex;gap:.4rem">
+              <button @click="openEditModal(p.id)" class="btn btn-sm btn-secondary">Edit</button>
               <a :href="'/api/parsers/' + p.id + '/download'" class="btn btn-sm">Download</a>
             </td>
           </tr>
@@ -318,6 +417,15 @@ function studioApp() {
 
     // Parser library
     parserLibrary: [],
+
+    // Edit modal
+    showEditModal: false,
+    editParser: { id: null, name: '', scope: 'enabled', vendor: '', model: '', version: 'ANY', xml_content: '' },
+    editSamples: [],
+    editValidateResult: null,
+    editValidateError: '',
+    editTestResults: [],
+    editTesting: false,
 
     async init() {
       await this.loadDeviceTypes();
@@ -446,6 +554,65 @@ function studioApp() {
     async loadParserLibrary() {
       const res = await fetch('/api/parsers');
       this.parserLibrary = await res.json();
+    },
+
+    async openEditModal(id) {
+      const res = await fetch(`/api/parsers/${id}`);
+      const data = await res.json();
+      this.editParser = data.parser;
+      this.editSamples = data.samples.length
+        ? data.samples.map(s => s.raw_log)
+        : [''];
+      this.editValidateResult = null;
+      this.editValidateError = '';
+      this.editTestResults = [];
+      this.editTesting = false;
+      this.showEditModal = true;
+    },
+
+    async saveEdit() {
+      await fetch(`/api/parsers/${this.editParser.id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          name:    this.editParser.name,
+          scope:   this.editParser.scope,
+          vendor:  this.editParser.vendor,
+          model:   this.editParser.model,
+          version: this.editParser.version,
+          xml:     this.editParser.xml_content,
+          samples: this.editSamples.filter(s => s.trim()),
+        }),
+      });
+      this.showEditModal = false;
+      await this.loadParserLibrary();
+    },
+
+    async validateEdit() {
+      const res = await fetch('/api/validate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ xml: this.editParser.xml_content }),
+      });
+      const data = await res.json();
+      this.editValidateResult = data.valid;
+      this.editValidateError = data.error || '';
+    },
+
+    async runEditTest() {
+      this.editTesting = true;
+      this.editTestResults = [];
+      try {
+        const samples = this.editSamples.filter(s => s.trim());
+        if (!samples.length) return;
+        const res = await fetch('/api/test', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ xml: this.editParser.xml_content, samples }),
+        });
+        const data = await res.json();
+        this.editTestResults = data.results || [];
+      } finally { this.editTesting = false; }
     },
   };
 }
