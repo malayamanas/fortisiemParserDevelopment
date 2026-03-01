@@ -571,21 +571,26 @@ function studioApp() {
     },
 
     async saveEdit() {
-      await fetch(`/api/parsers/${this.editParser.id}`, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          name:    this.editParser.name,
-          scope:   this.editParser.scope,
-          vendor:  this.editParser.vendor,
-          model:   this.editParser.model,
-          version: this.editParser.version,
-          xml:     this.editParser.xml_content,
-          samples: this.editSamples.filter(s => s.trim()),
-        }),
-      });
-      this.showEditModal = false;
-      await this.loadParserLibrary();
+      try {
+        const res = await fetch(`/api/parsers/${this.editParser.id}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            name:    this.editParser.name,
+            scope:   this.editParser.scope,
+            vendor:  this.editParser.vendor,
+            model:   this.editParser.model,
+            version: this.editParser.version,
+            xml:     this.editParser.xml_content,
+            samples: this.editSamples.filter(s => s.trim()),
+          }),
+        });
+        if (!res.ok) { alert(`Save failed: ${res.status}`); return; }
+        this.showEditModal = false;
+        await this.loadParserLibrary();
+      } catch (e) {
+        alert(`Save failed: ${e.message}`);
+      }
     },
 
     async validateEdit() {
@@ -612,6 +617,8 @@ function studioApp() {
         });
         const data = await res.json();
         this.editTestResults = data.results || [];
+      } catch (e) {
+        alert(`Test failed: ${e.message}`);
       } finally { this.editTesting = false; }
     },
   };
