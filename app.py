@@ -166,15 +166,18 @@ def api_update_parser(pid: int):
     if not p:
         return jsonify({"error": "Not found"}), 404
     data = request.get_json(force=True)
-    update_parser(DB_PATH, pid, {
-        "name":        data.get("name", p["name"]),
-        "scope":       data.get("scope", p["scope"]),
-        "vendor":      data.get("vendor", p["vendor"]),
-        "model":       data.get("model", p["model"]),
-        "version":     data.get("version", p["version"]),
-        "xml_content": data.get("xml", p["xml_content"]),
-    })
-    if "samples" in data:
+    try:
+        update_parser(DB_PATH, pid, {
+            "name":        data.get("name", p["name"]),
+            "scope":       data.get("scope", p["scope"]),
+            "vendor":      data.get("vendor", p["vendor"]),
+            "model":       data.get("model", p["model"]),
+            "version":     data.get("version", p["version"]),
+            "xml_content": data.get("xml", p["xml_content"]),
+        })
+    except ValueError:
+        return jsonify({"error": "Not found"}), 404
+    if data.get("samples"):
         save_samples(DB_PATH, pid,
                      [{"raw_log": s, "label": f"Sample {i+1}"}
                       for i, s in enumerate(data["samples"])])
