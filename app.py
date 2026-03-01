@@ -4,7 +4,7 @@ import io
 
 from parser_studio.db import (init_db, get_device_types, add_device_type,
                                save_parser, get_parsers, get_parser_by_id,
-                               save_samples, get_samples)
+                               update_parser, save_samples, get_samples)
 from parser_studio.detector import detect_format
 from parser_studio.extractor import extract_fields
 from parser_studio.mapper import suggest_mappings
@@ -149,6 +149,36 @@ def api_save_parser():
 @app.route("/api/parsers", methods=["GET"])
 def api_list_parsers():
     return jsonify(get_parsers(DB_PATH))
+
+
+@app.route("/api/parsers/<int:pid>", methods=["GET"])
+def api_get_parser(pid: int):
+    p = get_parser_by_id(DB_PATH, pid)
+    if not p:
+        return jsonify({"error": "Not found"}), 404
+    samples = get_samples(DB_PATH, pid)
+    return jsonify({"parser": p, "samples": samples})
+
+
+@app.route("/api/parsers/<int:pid>", methods=["PUT"])
+def api_update_parser(pid: int):
+    p = get_parser_by_id(DB_PATH, pid)
+    if not p:
+        return jsonify({"error": "Not found"}), 404
+    data = request.get_json(force=True)
+    update_parser(DB_PATH, pid, {
+        "name":        data.get("name", p["name"]),
+        "scope":       data.get("scope", p["scope"]),
+        "vendor":      data.get("vendor", p["vendor"]),
+        "model":       data.get("model", p["model"]),
+        "version":     data.get("version", p["version"]),
+        "xml_content": data.get("xml", p["xml_content"]),
+    })
+    if "samples" in data:
+        save_samples(DB_PATH, pid,
+                     [{"raw_log": s, "label": f"Sample {i+1}"}
+                      for i, s in enumerate(data["samples"])])
+    return jsonify({"ok": True})
 
 
 # === Download Parser ===
