@@ -161,7 +161,7 @@
     <h2>Generated Parser XML</h2>
     <div class="toolbar">
       <button @click="validateXml()" class="btn btn-secondary">Validate</button>
-      <button @click="showTestModal = true" class="btn btn-secondary">Test</button>
+      <button @click="openAndRunTest()" class="btn btn-secondary">Test</button>
       <button @click="saveParser()" class="btn btn-secondary">Save</button>
       <button @click="downloadXml()" class="btn btn-primary">Download .xml</button>
       <span x-show="validateResult !== null"
@@ -800,6 +800,11 @@ function studioApp() {
       const data = await res.json();
       this.validateResult = data.valid;
       this.validateError = data.error || '';
+    },
+
+    async openAndRunTest() {
+      this.showTestModal = true;
+      await this.runTest();
     },
 
     async runTest() {

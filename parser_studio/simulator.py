@@ -203,6 +203,54 @@ def _simulate_one(instructions_elem: ET.Element, raw: str) -> dict:
                     wrapper.extend(list(child))
                     attrs.update(_simulate_one(wrapper, raw))
 
+        elif tag == "collectAndSetAttrByRegex":
+            # Treat identically to collectFieldsByRegex
+            src_key = elem.attrib.get("src", "$_rawmsg").lstrip('$')
+            src_val = attrs.get(src_key, raw)
+            regex_elem = elem.find("regex")
+            if regex_elem is not None and regex_elem.text:
+                try:
+                    m = re.search(
+                        _fsm_regex_to_python(regex_elem.text.strip()),
+                        src_val, re.DOTALL
+                    )
+                    if m:
+                        attrs.update({k: v or "" for k, v in m.groupdict().items()})
+                except re.error:
+                    pass
+
+        elif tag == "switch":
+            # Try each case in order; commit the first whose regex matches.
+            for child in elem:
+                if child.tag != "case":
+                    continue  # skip <default/>
+                cfr = child.find("collectFieldsByRegex")
+                if cfr is None:
+                    cfr = child.find("collectAndSetAttrByRegex")
+                if cfr is None:
+                    continue
+                src_key = cfr.attrib.get("src", "$_rawmsg").lstrip('$')
+                src_val = attrs.get(src_key, attrs.get("_rawmsg", raw))
+                regex_elem = cfr.find("regex")
+                if regex_elem is None or not regex_elem.text:
+                    continue
+                try:
+                    m = re.search(
+                        _fsm_regex_to_python(regex_elem.text.strip()),
+                        src_val, re.DOTALL
+                    )
+                    if m:
+                        attrs.update({k: v or "" for k, v in m.groupdict().items()})
+                        # Also run any other elements inside this case
+                        for sibling in child:
+                            if sibling is not cfr:
+                                wrapper = ET.Element("p")
+                                wrapper.append(sibling)
+                                attrs.update(_simulate_one(wrapper, raw))
+                        break  # first match wins
+                except re.error:
+                    pass
+
     return attrs
 
 
