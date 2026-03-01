@@ -229,7 +229,6 @@ def api_download_parser(pid: int):
         f'  </deviceType>\n'
     ) if known else ""
     full_xml = (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
         f'<eventParser name="{p["name"]}">\n'
         f'{device_type_block}'
         f'{p["xml_content"] or ""}\n'
