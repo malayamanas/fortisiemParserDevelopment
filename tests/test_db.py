@@ -1,7 +1,10 @@
+import json
 import pytest
 from parser_studio.db import (init_db, add_device_type, get_device_types,
                                save_parser, get_parsers, get_parser_by_id,
-                               update_parser, save_samples, get_samples)
+                               update_parser, save_samples, get_samples,
+                               sync_event_attributes, get_event_attributes,
+                               get_eat_value_types, get_eat_names)
 
 def test_init_creates_tables(tmp_db):
     init_db(tmp_db)
@@ -132,6 +135,87 @@ def test_save_samples_sets_auto_label(tmp_db):
     rows = get_samples(tmp_db, pid)
     assert rows[0]["label"] == "Sample 1"
     assert rows[1]["label"] == "Sample 2"
+
+# === Event Attribute Types ===
+
+EAT_RECORDS = [
+    {"attributeId": 1, "name": "srcIpAddr", "displayName": "Source IP",
+     "valueType": "IP", "esAttribute": "ES_ip", "deprecated": False,
+     "usedByRbac": False, "sysDefined": True, "mandatory": False,
+     "anonymize": False, "allowedIncidentDef": True, "portAttr": False,
+     "systemEntity": True, "eventCodes": [], "naturalIdProperty": "name",
+     "naturalId": "srcIpAddr", "auditObjectType": "Event attribute type",
+     "auditObjectValue": "Source IP", "xmlId": "EventAttributeType$srcIpAddr"},
+    {"attributeId": 2, "name": "destIpAddr", "displayName": "Dest IP",
+     "valueType": "IP", "esAttribute": "ES_ip", "deprecated": False,
+     "usedByRbac": False, "sysDefined": True, "mandatory": False,
+     "anonymize": False, "allowedIncidentDef": True, "portAttr": False,
+     "systemEntity": True, "eventCodes": [], "naturalIdProperty": "name",
+     "naturalId": "destIpAddr", "auditObjectType": "Event attribute type",
+     "auditObjectValue": "Dest IP", "xmlId": "EventAttributeType$destIpAddr"},
+    {"attributeId": 3, "name": "user", "displayName": "User",
+     "valueType": "STRING", "esAttribute": "ES_keyword", "deprecated": False,
+     "usedByRbac": False, "sysDefined": True, "mandatory": False,
+     "anonymize": False, "allowedIncidentDef": True, "portAttr": False,
+     "systemEntity": True, "eventCodes": [], "naturalIdProperty": "name",
+     "naturalId": "user", "auditObjectType": "Event attribute type",
+     "auditObjectValue": "User", "xmlId": "EventAttributeType$user"},
+]
+
+def _write_eat_json(tmp_path, records):
+    import tempfile, os
+    f = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+    json.dump(records, f)
+    f.close()
+    return f.name
+
+def test_sync_event_attributes_inserts(tmp_db):
+    init_db(tmp_db)
+    path = _write_eat_json(tmp_db, EAT_RECORDS)
+    count = sync_event_attributes(tmp_db, path)
+    assert count == 3
+    rows = get_event_attributes(tmp_db)
+    assert len(rows) == 3
+    assert rows[0]["name"] == "destIpAddr"  # sorted by name
+
+def test_sync_event_attributes_deduplicates(tmp_db):
+    init_db(tmp_db)
+    path = _write_eat_json(tmp_db, EAT_RECORDS)
+    sync_event_attributes(tmp_db, path)
+    count2 = sync_event_attributes(tmp_db, path)
+    assert count2 == 0  # nothing new
+
+def test_get_event_attributes_search(tmp_db):
+    init_db(tmp_db)
+    path = _write_eat_json(tmp_db, EAT_RECORDS)
+    sync_event_attributes(tmp_db, path)
+    results = get_event_attributes(tmp_db, search="ip")
+    names = [r["name"] for r in results]
+    assert "srcIpAddr" in names
+    assert "destIpAddr" in names
+    assert "user" not in names
+
+def test_get_event_attributes_value_type_filter(tmp_db):
+    init_db(tmp_db)
+    path = _write_eat_json(tmp_db, EAT_RECORDS)
+    sync_event_attributes(tmp_db, path)
+    results = get_event_attributes(tmp_db, value_type="STRING")
+    assert len(results) == 1
+    assert results[0]["name"] == "user"
+
+def test_get_eat_value_types(tmp_db):
+    init_db(tmp_db)
+    path = _write_eat_json(tmp_db, EAT_RECORDS)
+    sync_event_attributes(tmp_db, path)
+    vts = get_eat_value_types(tmp_db)
+    assert set(vts) == {"IP", "STRING"}
+
+def test_get_eat_names(tmp_db):
+    init_db(tmp_db)
+    path = _write_eat_json(tmp_db, EAT_RECORDS)
+    sync_event_attributes(tmp_db, path)
+    names = get_eat_names(tmp_db)
+    assert names == sorted(["srcIpAddr", "destIpAddr", "user"])
 
 def test_samples_cascade_deleted_with_parser(tmp_db):
     """Deleting a parser must cascade-delete its samples."""

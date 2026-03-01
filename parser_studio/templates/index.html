@@ -510,6 +510,59 @@
     </table>
   </section>
 
+  <!-- EAT BROWSER -->
+  <section class="panel">
+    <h2>Event Attribute Types (EAT) Browser
+      <span class="badge" x-text="eatTotal + ' attributes'"></span>
+    </h2>
+    <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;margin-bottom:.75rem">
+      <input type="text" x-model="eatSearch" @input.debounce.300="searchEat()"
+             placeholder="Search name or display name…"
+             style="max-width:280px"/>
+      <select x-model="eatValueType" @change="searchEat()"
+              style="max-width:160px">
+        <option value="">All value types</option>
+        <template x-for="vt in eatValueTypes" :key="vt">
+          <option :value="vt" x-text="vt"></option>
+        </template>
+      </select>
+      <span style="font-size:.8rem;color:#6b7280" x-text="eatRows.length + ' shown'"></span>
+    </div>
+    <div style="overflow-x:auto;max-height:420px;overflow-y:auto">
+      <table class="library-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Display Name</th>
+            <th>Value Type</th>
+            <th>ES Attribute</th>
+            <th>Deprecated</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="eat in eatRows" :key="eat.id">
+            <tr>
+              <td class="mono" x-text="eat.name"></td>
+              <td x-text="eat.display_name"></td>
+              <td><span class="badge" x-text="eat.value_type"></span></td>
+              <td class="mono" x-text="eat.es_attribute || ''"></td>
+              <td>
+                <span x-show="eat.deprecated" class="badge badge-err">deprecated</span>
+              </td>
+              <td style="font-size:.8rem;color:#6b7280;max-width:260px;
+                         overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                  x-text="eat.description || ''"></td>
+            </tr>
+          </template>
+          <tr x-show="eatRows.length === 0">
+            <td colspan="6" class="hint" style="text-align:center;padding:1rem">No results.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
 </div>
 
 <script>
@@ -529,14 +582,11 @@ function studioApp() {
 
     // Mappings
     confirmedMappings: {},
-    allEats: [
-      'srcIpAddr','destIpAddr','srcHostName','destName','user','targetUser',
-      'msg','command','customer','domain','eventType','eventSeverity','eventTime',
-      'deviceTime','eventAction','procName','procId','parentProcName','parentProcId',
-      'fileName','filePath','hashMD5','hashSHA1','hashSHA256','ipProto',
-      'srcIpPort','destIpPort','sessionId','serviceName','virusName','threatLevel',
-      'policyName','ruleName','winEventId','connMode','authenMethod',
-    ],
+    allEats: [],
+
+    // EAT browser
+    eatRows: [], eatTotal: 0,
+    eatSearch: '', eatValueType: '', eatValueTypes: [],
 
     // Generated XML
     generatedXml: '',
@@ -581,6 +631,9 @@ function studioApp() {
     async init() {
       await this.loadDeviceTypes();
       await this.loadParserLibrary();
+      await this.loadEatNames();
+      await this.loadEatValueTypes();
+      await this.searchEat();
     },
 
     async loadDeviceTypes() {
@@ -718,6 +771,25 @@ function studioApp() {
     async loadParserLibrary() {
       const res = await fetch('/api/parsers');
       this.parserLibrary = await res.json();
+    },
+
+    async loadEatNames() {
+      const res = await fetch('/api/eat/names');
+      this.allEats = await res.json();
+    },
+
+    async loadEatValueTypes() {
+      const res = await fetch('/api/eat/value-types');
+      this.eatValueTypes = await res.json();
+    },
+
+    async searchEat() {
+      const params = new URLSearchParams();
+      if (this.eatSearch)    params.set('q', this.eatSearch);
+      if (this.eatValueType) params.set('valueType', this.eatValueType);
+      const res = await fetch('/api/eat?' + params);
+      this.eatRows = await res.json();
+      if (!this.eatSearch && !this.eatValueType) this.eatTotal = this.eatRows.length;
     },
 
     async openEditModal(id) {

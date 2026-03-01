@@ -59,6 +59,34 @@ def init_db(db_path: str) -> None:
                 raw_log     TEXT NOT NULL,
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS event_attributes (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                attribute_id         INTEGER,
+                name                 TEXT NOT NULL UNIQUE,
+                display_name         TEXT,
+                value_type           TEXT,
+                categories           TEXT,
+                format_type          TEXT,
+                special_type         TEXT,
+                deprecated           INTEGER NOT NULL DEFAULT 0,
+                used_by_rbac         INTEGER NOT NULL DEFAULT 0,
+                description          TEXT,
+                sys_defined          INTEGER NOT NULL DEFAULT 0,
+                mandatory            INTEGER NOT NULL DEFAULT 0,
+                es_attribute         TEXT,
+                anonymize            INTEGER NOT NULL DEFAULT 0,
+                allowed_incident_def INTEGER NOT NULL DEFAULT 1,
+                event_codes          TEXT,
+                natural_id_property  TEXT,
+                natural_id           TEXT,
+                audit_object_type    TEXT,
+                port_attr            INTEGER NOT NULL DEFAULT 0,
+                audit_object_value   TEXT,
+                xml_id               TEXT,
+                system_entity        INTEGER NOT NULL DEFAULT 1,
+                last_modified        INTEGER,
+                creation_time        INTEGER
+            );
         """)
         # Migration: add sequence_no to existing test_samples tables
         try:
@@ -166,3 +194,108 @@ def is_file_imported(db_path: str, file_path: str) -> bool:
     with _conn(db_path) as conn:
         row = conn.execute("SELECT id FROM parsers WHERE file_path=?", (file_path,)).fetchone()
         return row is not None
+
+
+import json as _json
+import time as _time
+
+def sync_event_attributes(db_path: str, json_path: str) -> int:
+    """Import EATs from a FortiSIEM Event Attributes JSON export.
+
+    Skips entries whose name is already in the table.
+    Returns count of newly inserted rows.
+    """
+    try:
+        with open(json_path, encoding="utf-8") as f:
+            records = _json.load(f)
+    except (OSError, ValueError):
+        return 0
+
+    now_ms = int(_time.time() * 1000)
+    inserted = 0
+
+    with _conn(db_path) as conn:
+        existing = {r[0] for r in conn.execute("SELECT name FROM event_attributes").fetchall()}
+        rows = []
+        for r in records:
+            name = r.get("name")
+            if not name or name in existing:
+                continue
+            rows.append((
+                r.get("attributeId"),
+                name,
+                r.get("displayName"),
+                r.get("valueType"),
+                _json.dumps(r.get("categories")),
+                r.get("formatType"),
+                r.get("specialType"),
+                int(bool(r.get("deprecated", False))),
+                int(bool(r.get("usedByRbac", False))),
+                r.get("description"),
+                int(bool(r.get("sysDefined", False))),
+                int(bool(r.get("mandatory", False))),
+                r.get("esAttribute"),
+                int(bool(r.get("anonymize", False))),
+                int(bool(r.get("allowedIncidentDef", True))),
+                _json.dumps(r.get("eventCodes", [])),
+                r.get("naturalIdProperty"),
+                r.get("naturalId"),
+                r.get("auditObjectType"),
+                int(bool(r.get("portAttr", False))),
+                r.get("auditObjectValue"),
+                r.get("xmlId"),
+                int(bool(r.get("systemEntity", True))),
+                r.get("lastModified", now_ms),
+                r.get("creationTime", now_ms),
+            ))
+        if rows:
+            conn.executemany(
+                """INSERT INTO event_attributes
+                   (attribute_id, name, display_name, value_type, categories,
+                    format_type, special_type, deprecated, used_by_rbac, description,
+                    sys_defined, mandatory, es_attribute, anonymize, allowed_incident_def,
+                    event_codes, natural_id_property, natural_id, audit_object_type,
+                    port_attr, audit_object_value, xml_id, system_entity,
+                    last_modified, creation_time)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                rows,
+            )
+            inserted = len(rows)
+    return inserted
+
+
+def get_event_attributes(db_path: str, search: str = "",
+                         value_type: str = "") -> list[dict]:
+    """Return EATs filtered by optional name/displayName search and valueType."""
+    sql = "SELECT * FROM event_attributes WHERE 1=1"
+    params: list = []
+    if search:
+        sql += " AND (name LIKE ? OR display_name LIKE ?)"
+        like = f"%{search}%"
+        params += [like, like]
+    if value_type:
+        sql += " AND value_type = ?"
+        params.append(value_type)
+    sql += " ORDER BY name ASC"
+    with _conn(db_path) as conn:
+        rows = conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_eat_value_types(db_path: str) -> list[str]:
+    """Return sorted list of distinct valueType values in event_attributes."""
+    with _conn(db_path) as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT value_type FROM event_attributes "
+            "WHERE value_type IS NOT NULL ORDER BY value_type"
+        ).fetchall()
+        return [r[0] for r in rows]
+
+
+def get_eat_names(db_path: str) -> list[str]:
+    """Return sorted list of all EAT names (for field-mapping dropdowns)."""
+    with _conn(db_path) as conn:
+        rows = conn.execute(
+            "SELECT name FROM event_attributes ORDER BY name ASC"
+        ).fetchall()
+        return [r[0] for r in rows]

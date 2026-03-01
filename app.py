@@ -6,9 +6,12 @@ import io
 from parser_studio.db import (init_db, get_device_types, add_device_type,
                                save_parser, get_parsers, get_parser_by_id,
                                update_parser, save_samples, get_samples,
-                               sync_device_types)
+                               sync_device_types, sync_event_attributes,
+                               get_event_attributes, get_eat_value_types,
+                               get_eat_names)
 
 DEVICE_TYPES_FILE = "docs/SIEM_Event_Attributes/device_types.txt"
+EAT_FILE          = "docs/SIEM_Event_Attributes/FortiSIEM_Event_Atrributes.json"
 
 
 def _load_device_types_from_file() -> list[tuple]:
@@ -44,6 +47,8 @@ def startup():
     if not hasattr(app, "_started"):
         init_db(DB_PATH)
         sync_device_types(DB_PATH, _load_device_types_from_file())
+        if os.path.isfile(EAT_FILE):
+            sync_event_attributes(DB_PATH, EAT_FILE)
         for d in PARSERS_DIRS:
             if os.path.isdir(d):
                 sync_parsers(d, DB_PATH)
@@ -249,6 +254,25 @@ def api_download_parser(pid: int):
 def api_sync_parsers():
     count = sum(sync_parsers(d, DB_PATH) for d in PARSERS_DIRS if os.path.isdir(d))
     return jsonify({"imported": count})
+
+
+# === Event Attribute Types (EAT) ===
+
+@app.route("/api/eat", methods=["GET"])
+def api_get_eat():
+    search     = request.args.get("q", "").strip()
+    value_type = request.args.get("valueType", "").strip()
+    return jsonify(get_event_attributes(DB_PATH, search, value_type))
+
+
+@app.route("/api/eat/value-types", methods=["GET"])
+def api_eat_value_types():
+    return jsonify(get_eat_value_types(DB_PATH))
+
+
+@app.route("/api/eat/names", methods=["GET"])
+def api_eat_names():
+    return jsonify(get_eat_names(DB_PATH))
 
 
 if __name__ == "__main__":
