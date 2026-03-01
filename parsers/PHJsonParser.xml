@@ -1,0 +1,5 @@
+<eventFormatRecognizer><![CDATA[^\s*\{.*"collectorId":.*,"phCustId":.*\}\s*$]]></eventFormatRecognizer>
+<parsingInstructions>
+    <collectAndSetAttrByJsonSymbol src="$_rawmsg"/>
+  </parsingInstructions>
+

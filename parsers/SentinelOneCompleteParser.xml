@@ -1,0 +1,101 @@
+<patternDefinitions>
+	<pattern name="patExceptPipe">[^\|]+</pattern>
+	<pattern name="patStrEndQuote">[^"]+</pattern>
+</patternDefinitions>
+<eventFormatRecognizer>SentinelOne-&lt;_St:gPatStr&gt;\s+</eventFormatRecognizer>
+<parsingInstructions>
+	<!-- === BODY EXTRACTION === -->
+	<switch>
+		<case>
+			<collectFieldsByRegex src="$_rawmsg">
+				<regex>SentinelOne-&lt;_St:gPatStr&gt;\s+\{ &lt;_body:gPatMesgBody&gt;\}</regex>
+			</collectFieldsByRegex>
+		</case>
+		<case>
+			<collectFieldsByRegex src="$_rawmsg">
+				<regex>SentinelOne-&lt;_St:gPatStr&gt;\s+&lt;_body:gPatMesgBody&gt;</regex>
+			</collectFieldsByRegex>
+		</case>
+	</switch>
+	<!-- === DEFAULT EVENT TYPE === -->
+	<setEventAttribute attr="eventType">combineMsgId("SentinelOne", "-", $_St, "-", "General")</setEventAttribute>
+	<!-- === HANDLE NON-JSON BODY === -->
+	<when test="not_matches($_body, '^{')">
+		<setEventAttribute attr="_body1">combineMsgId("{", $_body, "}")</setEventAttribute>
+		<collectAndSetAttrByJSON src="$_body1">
+			<attrKeyMap attr="status" key="status"/>
+		</collectAndSetAttrByJSON>
+	</when>
+
+		<!-- === JSON FIELD EXTRACTION === -->
+		<collectAndSetAttrByJSON src="$_body">
+			<!-- Threats: Detection-Critical -->
+			<attrKeyMap attr="threatId" key="threatId"/>
+			<attrKeyMap attr="threatName" key="threatName"/>
+			<attrKeyMap attr="classification" key="classification"/>
+			<attrKeyMap attr="confidence" key="confidenceLevel"/>
+			<attrKeyMap attr="mitigationStatus" key="mitigationStatus"/>
+			<attrKeyMap attr="hashSHA256" key="sha256"/>
+			<attrKeyMap attr="hashMD5" key="md5"/>
+			<attrKeyMap attr="hashSHA1" key="sha1"/>
+			<attrKeyMap attr="storyline" key="storyline"/>
+			<attrKeyMap attr="hostName" key="agentComputerName"/>
+			<attrKeyMap attr="srcIpAddr" key="agentIpV4"/>
+			<attrKeyMap attr="user" key="processUser"/>
+			<attrKeyMap attr="commandLine" key="commandLineArguments"/>
+			<!-- Threats: Triage -->
+			<attrKeyMap attr="filePath" key="filePath"/>
+			<attrKeyMap attr="procName" key="originatorProcess"/>
+			<attrKeyMap attr="s1incidentStatus" key="incidentStatus"/>
+			<attrKeyMap attr="analystVerdict" key="analystVerdict"/>
+			<attrKeyMap attr="osName" key="agentOsName"/>
+			<attrKeyMap attr="targetUser" key="agentLastLoggedInUserName"/>
+			<!-- Threats: Enrichment -->
+			<attrKeyMap attr="domain" key="agentDomain"/>
+			<attrKeyMap attr="agentVersion" key="agentVersion"/>
+			<attrKeyMap attr="groupName" key="groupName"/>
+			<attrKeyMap attr="SiteName" key="siteName"/>
+			<attrKeyMap attr="externalIp" key="externalIp"/>
+			<!-- Threats: MITRE (First Indicator) -->
+			<attrKeyMap attr="threatCategory" key="indicators[0].category"/>
+			<attrKeyMap attr="threatDescription" key="indicators[0].description"/>
+			<attrKeyMap attr="attackTactic" key="indicators[0].tactics[0].name"/>
+			<attrKeyMap attr="attackTechnique" key="indicators[0].tactics[0].techniques[0].name"/>
+			<!-- Activities: Minimum for Event Type Logic -->
+			<attrKeyMap attr="interface" key="interface"/>
+			<attrKeyMap attr="_eventType" key="eventType"/>
+			<attrKeyMap attr="hostName" key="computerName"/>
+			<attrKeyMap attr="srcIpAddr" key="ipAddress"/>
+			<attrKeyMap attr="user" key="lastLoggedInUserName"/>
+			<!-- Status for No-Data detection -->
+			<attrKeyMap attr="status" key="status"/>
+		</collectAndSetAttrByJSON>
+		<!-- === EVENT TYPE REFINEMENT: ACTIVITIES === -->
+		<when test="exist interface">
+			<when test="exist _eventType">
+				<setEventAttribute attr="eventType">combineMsgId("SentinelOne", "-", $_St, "-", $interface, "-", $_eventType)</setEventAttribute>
+				<setEventAttribute attr="action">$_eventType</setEventAttribute>
+			</when>
+		</when>
+		<!-- === EVENT TYPE REFINEMENT: THREATS === -->
+		<when test="exist classification">
+			<choose>
+				<when test="matches($mitigationStatus, 'not_mitigated')">
+					<setEventAttribute attr="eventType">combineMsgId("SentinelOne", "-", $_St, "-", $classification, "-Active")</setEventAttribute>
+				</when>
+				<otherwise>
+					<setEventAttribute attr="eventType">combineMsgId("SentinelOne", "-", $_St, "-", $classification)</setEventAttribute>
+				</otherwise>
+			</choose>
+		</when>
+		<!-- === EVENT TYPE: NO DATA === -->
+		<when test="exist status">
+			<when test="matches($status, 'no data')">
+				<setEventAttribute attr="eventType">SentinelOne-No-Data</setEventAttribute>
+			</when>
+		</when>
+		<!-- === VENDOR ATTRIBUTION === -->
+		<setEventAttribute attr="reptVendor">SentinelOne</setEventAttribute>
+		<setEventAttribute attr="reptModel">Endpoint Protection Service</setEventAttribute>
+
+</parsingInstructions>

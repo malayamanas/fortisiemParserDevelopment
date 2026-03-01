@@ -1,0 +1,345 @@
+<eventFormatRecognizer><![CDATA[^\s*<:gPatSyslogPRI>(?:<:gPatMon>\s+<:gPatDay>\s+<:gPatTime>(?:\.\d+)?\s+<:gPatHostName>\s+(?:<:gPatIpAddr>\s+)?)?named(?:-sdb)?\[\d+\]:\s]]></eventFormatRecognizer>
+<patternDefinitions>
+    <pattern name="patBindDnsSig"><![CDATA[named(?:-sdb)?\[\d+\]:]]></pattern>
+    <pattern name="patQueryNum"><![CDATA[#\d+:]]></pattern>
+    <pattern name="patTypes"><![CDATA[client|error:|lame|zone|disabled rpz|SERVFAIL|REFUSED|validating|host|resolver|network]]></pattern>
+    <pattern name="patDnsTypes"><![CDATA[PTR|A|MX|CNAME|NSEC3]]></pattern>
+    <pattern name="patAction"><![CDATA[[^\s:]+]]></pattern>
+    <pattern name="patStrEndSlash"><![CDATA[[^/]*]]></pattern>
+    <pattern name="patStrEndQuoteSpace"><![CDATA[[^' ]*]]></pattern>
+  </patternDefinitions>
+<parsingInstructions>
+    <!-- parsing common fields
+	<158>Nov 21 18:17:54 SJ-Dev-S-RH-VMW-01 named[12635]: 28-Feb-2008 12:58:54.151 client 192.168.18.20#1026: query: example.com IN A +
+	<158>Nov 21 18:17:54 SJ-Dev-S-RH-VMW-01 named[12635]: 29-Feb-2008 04:58:55.086 error: client 192.168.18.20#1026: update 'example.com/IN' denied
+          <158>Dec  9 04:20:19 192.168.0.30 named[8636]: Dec 09 11:45:53.787 client 192.168.64.19#32781: query: SUPER_APP_X IN A
+	  <158>named[21625]: 25-Mar-2010 18:49:08.426 client 172.16.10.10#58323: query: 110.20.16.172.in-addr.arpa IN PTR +
+          <30>named[4853]: lame server resolving '192.168.0.1.in-addr.arpa' (in '115.72.77.in-addr.arpa'?): 192.168.0.2#53
+          <158>May  2 12:58:36 10.102.3.11 named[6940]: client 10.102.23.55#62989 (SC-L-ALITTLE2.inca.com): query: SC-L-ALITTLE2.inca.com IN AAAA + (10.102.3.10)
+     <158>May  2 12:58:41 10.102.3.11 named[6940]: client 10.102.19.211#53044 (example.com): query: example.com IN A + (10.102.3.10)
+	 <158>May  2 13:05:31 10.0.2.21 named[7136]: client 10.102.3.11#60815/key dhcp_updater_default: updating zone 'example.com/IN': adding an RR at 'example.com' AAAA
+	 <158>May  2 13:06:17 10.0.2.21 named[7136]: client 10.102.3.11#60815/key dhcp_updater_default: updating zone 'example.com/IN': deleting an RR at example.com AAAA
+	 <158>May  2 13:06:17 10.0.2.21 named[7136]: client 10.102.3.11#60815/key dhcp_updater_default: updating zone 'example.com/IN': deleting an RR at example.com TXT
+	 <158>May  2 13:06:17 10.0.2.21 named[7136]: client 10.102.3.11#60815/key dhcp_updater_default: signer dhcp_updater_default approved
+	 <158>May  2 13:06:33 10.0.2.21 named[7136]: client 10.120.3.10#18101/key dhcp_updater_default: updating zone 'example.com/IN': update unsuccessful: example.com/TXT: 'RRset exists (value dependent)' prerequisite not satisfied
+	 <158>May  2 13:05:55 10.120.3.11 named[28160]: client 10.120.3.108#59049 (example.com): query: example.com IN SRV +T (10.120.3.10)
+	 <30>May  2 12:58:51 10.102.3.50 named[5509]: client 10.102.29.145#63141 (time.apple.com): query: time.apple.com IN TXT + (10.102.3.50)
+	 <155>May  2 12:58:51 10.0.2.21 named[7136]: client 10.102.30.25#61336: update 'example.com/IN' denied
+<30>Oct 29 18:27:36 10.204.255.252 named[9369]: queries: client 10.204.192.2#59884 (client-cf.dropbox.com): query: client-cf.dropbox.com IN A + (10.204.255.252)
+<30>Oct 29 18:25:54 10.204.255.252 named[9369]: general: zone example.com/IN: ZRQ applied transaction 2921228 with SOA serial 7582132. Zone version is now 1413356.
+<28>Nov 11 12:08:46 10.1.5.23 named[7750]: client 10.1.152.133#56182 (example.com): rpz NSIP rewrite a.mil via a.mil NS db_find() failed: failure
+<30>Nov 11 12:14:50 10.1.5.23 named[7750]: disabled rpz IP NXDOMAIN rewrite @ via 1.1.1.1.local
+         -->
+    <switch>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>\s*<_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>\s+<:gPatStr>\s+<:patBindDnsSig>\s+<:gPatDay>-<:gPatMon>-<:gPatYear>\s+<:gPatTime>\.[\d]+\s+<_type:patTypes><_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+        <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_time)</setEventAttribute>
+      </case>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>\s*<_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>\s+<:gPatStr>\s+<:patBindDnsSig>\s+<:gPatMon>\s+<:gPatDay>\s+<:gPatTime>\.[\d]+\s+<_type:patTypes><_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+        <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_time)</setEventAttribute>
+      </case>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>\s*<_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>\s+<:gPatStr>\s+<:patBindDnsSig>\s+(?:<:gPatDay>-<:gPatMon>-<:gPatYear>\s+<:gPatTime>\.[\d]+\s+)?(?:(?:queries|general): )?<_type:patTypes><_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+        <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_time)</setEventAttribute>
+      </case>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>\s*<_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>\s+<:gPatStr>\s+<:patBindDnsSig>\s+message\s+repeated\s+\d+\s+time(?:s)?:\s+\[\s+<:gPatDay>-<:gPatMon>-<:gPatYear>\s+<:gPatTime>\.[\d]+\s+(?:(?:queries|general): )?<_type:patTypes><_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+        <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_time)</setEventAttribute>
+      </case>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>\s*<:patBindDnsSig>\s+<_day:gPatDay>-<_mon:gPatMon>-<:gPatYear>\s+<_time:gPatTimeMSec>\s+<_type:patTypes><_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+        <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_time)</setEventAttribute>
+      </case>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>\s*<:patBindDnsSig>\s+<_type:patTypes><_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+      </case>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>\s*<:patBindDnsSig>\s+<_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>(?:\.\d+)?\s+<_type:patTypes>:?\s+<_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+      </case>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>\s*<_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>(?:\.[\d]+)?\s+(?:<reptDevIpAddr:gPatIpAddr>|<reptDevName:gPatHostName>)\s+<:patBindDnsSig>\s+<_type:patTypes>\s+<_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+        <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_time)</setEventAttribute>
+      </case>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>\s*<_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>\s+<reptDevName:gPatHostName>\s+<reptDevIpAddr:gPatIpAddr>\s+<:patBindDnsSig>\s+<_type:patTypes><_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+      </case>
+      <default>
+        <setEventAttribute attr="eventType">BIND_DNS_Generic</setEventAttribute>
+      </default>
+    </switch>
+
+    <!--when test="matches($_senderHostName, '\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}')">
+      <setEventAttribute attr="reptDevIpAddr">$_senderHostName</setEventAttribute>
+    </when-->
+    <setEventAttribute attr="eventType">BIND_DNS_Generic</setEventAttribute>
+    <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+    <setEventAttribute attr="eventAction">0</setEventAttribute>
+    <choose>
+      <!-- message specific parsing -->
+      <!-- DH update -->
+      <when test="$_type = 'SERVFAIL'">
+        <!-- 
+        <30>Jun  5 15:08:36 mx01 named[28094]: SERVFAIL unexpected RCODE resolving '!105.67.0.218!.wum.edu.pl/A/IN': 46.242.149.21#53 
+        -->
+        <switch>
+          <case>
+            <collectFieldsByRegex src="$_body">
+              <regex><![CDATA[.*unexpected RCODE resolving\s\'<destName:gPatStr>\/<:patDnsTypes>\/IN\':\s+<dnsServer:gPatIpAddr>]]></regex>
+            </collectFieldsByRegex>
+            <setEventAttribute attr="eventType">BIND_DNS_SERVFAIL</setEventAttribute>
+          </case>
+          <default/>
+        </switch>
+      </when>
+      <when test="$_type = 'REFUSED'">
+        <!-- 
+      <30>Jun  5 15:08:41 mx01 named[28094]: REFUSED unexpected RCODE resolving '68.205.220.103.in-addr.arpa/PTR/IN': 103.220.204.1#53
+      -->
+        <switch>
+          <case>
+            <collectFieldsByRegex src="$_body">
+              <regex><![CDATA[.*unexpected RCODE resolving\s\'<destName:gPatStr>\/<:patDnsTypes>\/IN\':\s+<dnsServer:gPatIpAddr>]]></regex>
+            </collectFieldsByRegex>
+            <setEventAttribute attr="eventType">BIND_DNS_REFUSED</setEventAttribute>
+          </case>
+          <default/>
+        </switch>
+      </when>
+      <when test="$_type = 'validating'">
+        <switch>
+          <case>
+            <!-- 
+            <30>Jun  5 15:08:33 mx01 named[28094]:  validating jk3e2hts1r4635oqb6ui0n4n9bgq16n3.247.117.in-addr.arpa/NSEC3: no valid signature found
+           -->
+            <collectFieldsByRegex src="$_body">
+              <regex><![CDATA[<destName:gPatStr>\/<:patDnsTypes>:\s+no valid signature found]]></regex>
+            </collectFieldsByRegex>
+            <setEventAttribute attr="eventType">BIND_DNS_INVALID_SIGNATURE</setEventAttribute>
+          </case>
+          <default/>
+        </switch>
+      </when>
+      <when test="$_type IN 'host, network'">
+        <switch>
+          <case>
+            <!-- 
+            <30>Jun  5 15:08:55 mx01 named[28094]: host unreachable resolving '146.181.212.125.in-addr.arpa/PTR/IN': 203.113.131.2#53
+            <30>Apr 10 16:45:26.000 abc.com named[2040316]: network unreachable resolving 'a1b2c3d4e5.sample.net/A/IN': 2600:9000:5302:ab00::1#53
+            -->
+            <collectFieldsByRegex src="$_body">
+              <regex><![CDATA[.*unreachable resolving\s+\'<destName:gPatStr>\/<:patDnsTypes>\/IN\':\s+<dnsServer:gPatIpAddr>]]></regex>
+            </collectFieldsByRegex>
+            <setEventAttribute attr="eventType">BIND_DNS_UNREACHABLE</setEventAttribute>
+          </case>
+          <default/>
+        </switch>
+      </when>
+      <!-- end DH edit/update -->
+
+      <when test="$_type = 'client'">
+        <switch>
+          <case>
+            <collectFieldsByRegex src="$_body">
+              <regex><![CDATA[<srcIpAddr:gPatIpAddr>#[\d]+/key\s+<_action:patAction>:\s+<_body1:gPatMesgBody>]]></regex>
+            </collectFieldsByRegex>
+          </case>
+          <case>
+            <collectFieldsByRegex src="$_body">
+              <regex><![CDATA[<srcIpAddr:gPatIpAddr>#\d+\s+\(<destDomain:gPatStr>\):\s+<_action:patAction>:?\s+<_body1:gPatMesgBody>]]></regex>
+            </collectFieldsByRegex>
+          </case>
+          <case>
+            <collectFieldsByRegex src="$_body">
+              <regex><![CDATA[<srcIpAddr:gPatIpAddr>#\d+:\s+<_action:patAction>:?\s+<_body1:gPatMesgBody>]]></regex>
+            </collectFieldsByRegex>
+          </case>
+          <default/>
+        </switch>
+        <choose>
+          <when test="not_exist _action"/>
+          <when test="$_action = 'query'">
+            <collectFieldsByRegex src="$_body1">
+              <regex><![CDATA[<_dest:gPatStr>\s+IN\s+<dnsQueryType:gPatWord><:gPatMesgBody>]]></regex>
+            </collectFieldsByRegex>
+            <when test="$dnsQueryType = 'A'">
+              <setEventAttribute attr="eventType">"BIND_DNS_A_Query"</setEventAttribute>
+              <setEventAttribute attr="destName">$_dest</setEventAttribute>
+              <setEventAttribute attr="destIpPort">53</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            </when>
+
+            <when test="$dnsQueryType = 'AAAA'">
+              <setEventAttribute attr="eventType">"BIND_DNS_A_Query"</setEventAttribute>
+              <setEventAttribute attr="destName">$_dest</setEventAttribute>
+              <setEventAttribute attr="destIpPort">53</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            </when>
+
+            <when test="$dnsQueryType = 'PTR'">
+              <setEventAttribute attr="eventType">"BIND_DNS_PTR_Query"</setEventAttribute>
+              <setEventAttribute attr="destName">$_dest</setEventAttribute>
+              <setEventAttribute attr="destIpPort">53</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            </when>
+
+            <when test="$dnsQueryType = 'NS'">
+              <setEventAttribute attr="eventType">"BIND_DNS_NS_Query"</setEventAttribute>
+              <setEventAttribute attr="destIpPort">53</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            </when>
+
+            <when test="$dnsQueryType = 'MX'">
+              <setEventAttribute attr="eventType">"BIND_DNS_MX_Query"</setEventAttribute>
+              <setEventAttribute attr="destIpPort">53</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            </when>
+
+            <when test="$dnsQueryType = 'SOA'">
+              <setEventAttribute attr="eventType">"BIND_DNS_SOA_Query"</setEventAttribute>
+              <setEventAttribute attr="destIpPort">53</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            </when>
+
+            <when test="$dnsQueryType = 'CNAME'">
+              <setEventAttribute attr="eventType">"BIND_DNS_CNAME_Query"</setEventAttribute>
+              <setEventAttribute attr="destIpPort">53</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            </when>
+
+            <when test="$dnsQueryType = 'HINFO'">
+              <setEventAttribute attr="eventType">"BIND_DNS_HINFO_Query"</setEventAttribute>
+              <setEventAttribute attr="destIpPort">53</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            </when>
+
+            <when test="$dnsQueryType = 'AXFR'">
+              <setEventAttribute attr="eventType">"BIND_DNS_AXFR_Query"</setEventAttribute>
+              <setEventAttribute attr="destIpPort">53</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            </when>
+
+            <when test="$dnsQueryType = 'IXFR'">
+              <setEventAttribute attr="eventType">"BIND_DNS_IXFR_Query"</setEventAttribute>
+              <setEventAttribute attr="destIpPort">53</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            </when>
+            <when test="$dnsQueryType = 'TXT'">
+              <setEventAttribute attr="eventType">"BIND_DNS_TXT_Query"</setEventAttribute>
+              <setEventAttribute attr="destName">$_dest</setEventAttribute>
+              <setEventAttribute attr="destIpPort">53</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            </when>
+            <when test="$dnsQueryType = 'SRV'">
+              <setEventAttribute attr="eventType">"BIND_DNS_SRV_Query"</setEventAttribute>
+              <setEventAttribute attr="destName">$_dest</setEventAttribute>
+              <setEventAttribute attr="destIpPort">53</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            </when>
+          </when>
+          <when test="$_action = 'dhcp_updater_default'">
+            <switch>
+              <case>
+                <collectFieldsByRegex src="$_body1">
+                  <regex><![CDATA[updating zone '<dnsZone:patStrEndSlash>/IN': <_key:gPatStr> an RR at '?<destName:patStrEndQuoteSpace>'? <_recordType:gPatStr>]]></regex>
+                </collectFieldsByRegex>
+                <setEventAttribute attr="eventType">combineMsgId("BIND_DNS_DHCP_UPDATE_", $_key, "_", $_recordType, "_", "record")</setEventAttribute>
+              </case>
+              <case>
+                <collectFieldsByRegex src="$_body1">
+                  <regex><![CDATA[signer dhcp_updater_default approved]]></regex>
+                </collectFieldsByRegex>
+                <setEventAttribute attr="eventType">"BIND_DNS_DHCP_UPDATE_Signer_Approved"</setEventAttribute>
+              </case>
+              <case>
+                <collectFieldsByRegex src="$_body1">
+                  <regex><![CDATA[updating zone '<dnsZone:patStrEndSlash>/IN': update unsuccessful: <destName:patStrEndSlash>/.*]]></regex>
+                </collectFieldsByRegex>
+                <setEventAttribute attr="eventType">"BIND_DNS_DHCP_UPDATE_Failed"</setEventAttribute>
+              </case>
+            </switch>
+          </when>
+          <when test="$_action = 'update'">
+            <collectFieldsByRegex src="$_body1">
+              <regex><![CDATA['<dnsZone:patStrEndSlash>/IN' <_act:gPatStr>]]></regex>
+            </collectFieldsByRegex>
+            <setEventAttribute attr="eventType">combineMsgId("BIND_DNS_DHCP_UPDATE_", $_act)</setEventAttribute>
+          </when>
+          <when test="$_action = 'rpz'">
+            <setEventAttribute attr="eventType">BIND_DNS_RPZ</setEventAttribute>
+            <switch>
+              <case>
+                <collectFieldsByRegex src="$_body1">
+                  <regex><![CDATA[^\w+ rewrite \S+ via \S+ <errReason:gPatMesgBody>]]></regex>
+                </collectFieldsByRegex>
+
+                <when test="matches($errReason, 'failed')">
+                  <setEventAttribute attr="eventType">BIND_DNS_RPZ_FAILURE</setEventAttribute>
+                </when>
+              </case>
+              <default/>
+            </switch>
+          </when>
+        </choose>
+      </when>
+
+      <when test="$_type = 'error:'">
+        <collectAndSetAttrByRegex src="$_body">
+          <regex><![CDATA[client <srcIpAddr:gPatIpAddr><:patQueryNum> <:gPatWord> <destName:gPatStr> <:gPatWord>]]></regex>
+        </collectAndSetAttrByRegex>
+        <setEventAttribute attr="eventType">"BIND_DNS_Update_Error"</setEventAttribute>
+        <setEventAttribute attr="eventAction">1</setEventAttribute>
+        <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+      </when>
+
+      <when test="$_type = 'disabled rpz'">
+        <setEventAttribute attr="eventType">BIND_DNS_RPZ_DISABLED</setEventAttribute>
+      </when>
+      <when test="$_type = 'resolver'">
+        <setEventAttribute attr="eventType">BIND_DNS_RESOLVER_Generic</setEventAttribute>
+        <switch>
+          <case>
+            <collectAndSetAttrByRegex src="$_body">
+              <regex><![CDATA[createfetch: <destDomain:gPatStr>\s+<dnsQueryType:gPatStr>]]></regex>
+            </collectAndSetAttrByRegex>
+            <setEventAttribute attr="eventType">BIND_DNS_RESOLVER_Recursive_Lookup</setEventAttribute>
+          </case>
+          <default/>
+        </switch>
+      </when>
+    </choose>
+
+    <when test="exist destName">
+      <setEventAttribute attr="domainEntropy">calcDomainEntropy($destName)</setEventAttribute>
+      <when test="not_exist destDomain">
+        <switch>
+          <case>
+            <collectFieldsByRegex src="$destName">
+              <regex><![CDATA[^<destDomain:patStrEndSlash>]]></regex>
+            </collectFieldsByRegex>
+          </case>
+          <default/>
+        </switch>
+      </when>
+    </when>
+
+  </parsingInstructions>
+

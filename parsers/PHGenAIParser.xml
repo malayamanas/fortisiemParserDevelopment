@@ -1,0 +1,13 @@
+<eventFormatRecognizer><![CDATA[^\s*<:gPatSyslogPRI><:gPatMon>\s+<:gPatDay>\s+<:gPatTime>\s+<:gPatHostName>\s+phGenerativeAI:\s+\[PH_AUDIT_GENAI_USER_QUERY\]:]]></eventFormatRecognizer>
+<parsingInstructions>
+    <collectFieldsByRegex src="$_rawmsg">
+      <regex><![CDATA[<:gPatSyslogPRI><_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>\s+(?:<reptDevIpAddr:gPatIpAddr>|<reptDevName:gPatHostName>)\s+phGenerativeAI:\s+\[<eventType:gPatWord>\]:<_body:gPatMesgBody>]]></regex>
+    </collectFieldsByRegex>
+
+    <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_time)</setEventAttribute>
+    <setEventAttribute attr="phEventCategory">2</setEventAttribute>
+
+    <collectAndSetAttrBySymbol sep=",[" src="$_body" symEnd="]=" symStart="["/>
+
+  </parsingInstructions>
+

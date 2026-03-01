@@ -1,0 +1,106 @@
+<eventFormatRecognizer><![CDATA[CISCO IPS]]></eventFormatRecognizer>
+<parsingInstructions>
+    <setEventAttribute attr="eventType">Cisco_IPS-Generic</setEventAttribute>
+    <setEventAttribute attr="eventAction">0</setEventAttribute>
+    <setEventAttribute attr="extEventRecvProto">CISCO_SDEE</setEventAttribute>
+
+    <collectFieldsByXPath src="$_rawmsg">
+      <attrKeyMap attr="_severity" key="evAlert/@severity"/>
+      <attrKeyMap attr="_intfName" key="evAlert/alertDetails"/>
+      <attrKeyMap attr="appName" key="evAlert/originator/appName"/>
+      <attrKeyMap attr="reptDevName" key="evAlert/originator/hostId"/>
+      <attrKeyMap attr="srcIpAddr" key="evAlert/participants/attack/attacker/addr"/>
+      <attrKeyMap attr="srcIpPort" key="evAlert/participants/attack/attacker/port"/>
+      <attrKeyMap attr="destIpAddr" key="evAlert/participants/attack/victim/addr"/>
+      <attrKeyMap attr="destIpPort" key="evAlert/participants/attack/victim/port"/>
+      <attrKeyMap attr="ipsSignatureId" key="evAlert/signature/@id"/>
+      <attrKeyMap attr="ipsSignatureId" key="evAlert/signature/@sigId"/>
+      <attrKeyMap attr="ipsEventName" key="evAlert/signature/@sigName"/>
+      <attrKeyMap attr="_subSigId" key="evAlert/signature/@subSigId"/>
+      <attrKeyMap attr="devEventTypeGrp" key="evAlert/signature/marsCategory"/>
+
+      <attrKeyMap attr="_severity" key="evIdsAlert/@severity"/>
+      <attrKeyMap attr="_deniedFlow" key="evIdsAlert/actions/deniedFlow"/>
+      <attrKeyMap attr="_droppedPacket" key="evIdsAlert/actions/droppedPacket"/>
+      <attrKeyMap attr="_tcpOneWayResetSent" key="evIdsAlert/actions/tcpOneWayResetSent"/>
+      <attrKeyMap attr="_fromAttacker" key="evIdsAlert/context/fromAttacker"/>
+      <attrKeyMap attr="intfName" key="evIdsAlert/interface"/>
+      <attrKeyMap attr="appName" key="evIdsAlert/originator/appName"/>
+      <attrKeyMap attr="reptDevName" key="evIdsAlert/originator/hostId"/>
+      <attrKeyMap attr="srcIpAddr" key="evIdsAlert/participants/attacker/addr"/>
+      <attrKeyMap attr="srcIpPort" key="evIdsAlert/participants/attacker/port"/>
+      <attrKeyMap attr="destIpAddr" key="evIdsAlert/participants/target/addr"/>
+      <attrKeyMap attr="destIpPort" key="evIdsAlert/participants/target/port"/>
+      <attrKeyMap attr="_ipProto" key="evIdsAlert/protocol"/>
+      <attrKeyMap attr="ipsEvRR" key="evIdsAlert/riskRatingValue"/>
+      <attrKeyMap attr="eventType" key="evIdsAlert/signature/@id"/>
+      <attrKeyMap attr="ipsSignatureId" key="evIdsAlert/signature/@id"/>
+      <attrKeyMap attr="ipsEventName" key="evIdsAlert/signature/@type"/>
+      <attrKeyMap attr="devEventTypeGrp" key="evIdsAlert/signature/marsCategory"/>
+      <attrKeyMap attr="_subSigId" key="evIdsAlert/signature/subsigId"/>
+      <attrKeyMap attr="ipsEvTR" key="evIdsAlert/threatRatingValue"/>
+      <attrKeyMap attr="ipsTriggerPacket" key="evIdsAlert/triggerPacket"/>
+    </collectFieldsByXPath>
+
+    <when test="exist _intfName">
+      <collectFieldsByRegex src="$_intfName">
+        <regex><![CDATA[InterfaceAttributes:\s+.*backplane="<intfName:gPatStr>".*]]></regex>
+      </collectFieldsByRegex>
+    </when>
+
+    <when test="exist _intfName">
+      <setEventAttribute attr="eventType">combineMsgId("Cisco_IPS-", $ipsSignatureId)</setEventAttribute>
+      <when test="exist _subSigId">
+        <setEventAttribute attr="eventType">combineMsgId($eventType, "/", $_subSigId)</setEventAttribute>
+      </when>
+    </when>
+
+    <!-- event severity -->
+    <choose>
+      <when test="not_exist _severity"/>
+      <when test="$_severity = 'high'">
+        <setEventAttribute attr="eventSeverity">7</setEventAttribute>
+      </when>
+
+      <when test="$_severity = 'medium'">
+        <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+      </when>
+
+      <when test="$_severity = 'low'">
+        <setEventAttribute attr="eventSeverity">2</setEventAttribute>
+      </when>
+
+      <when test="$_severity = 'informational'">
+        <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+      </when>
+    </choose>
+
+    <when test="exist _ipProto">
+      <setEventAttribute attr="ipProto">convertStrToIntIpProto($_ipProto)</setEventAttribute>
+    </when>
+
+    <when test="exist _droppedPacket">
+      <when test="$_droppedPacket = 'true'">
+        <setEventAttribute attr="eventAction">1</setEventAttribute>
+        <setEventAttribute attr="_fwAction">droppedPacket</setEventAttribute>
+
+        <when test="exist _deniedFlow">
+          <when test="$_deniedFlow = 'true'">
+            <setEventAttribute attr="__fwAction">combineMsgId($_fwAction, ";deniedFlow")</setEventAttribute>
+
+            <when test="exist _tcpOneWayResetSent">
+              <when test="$_tcpOneWayResetSent = 'true'">
+                <setEventAttribute attr="fwAction">combineMsgId($__fwAction, ";tcpOneWayResetSent")</setEventAttribute>
+              </when>
+            </when>
+          </when>
+        </when>
+      </when>
+    </when>
+
+    <when test="exist _fromAttacker">
+      <setEventAttribute attr="httpFullRequest">decodeBase64($_fromAttacker)</setEventAttribute>
+      <setEventAttribute attr="httpFullRequest">URLDecode($httpFullRequest)</setEventAttribute>
+    </when>
+  </parsingInstructions>
+

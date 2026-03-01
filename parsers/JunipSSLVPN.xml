@@ -1,0 +1,306 @@
+<eventFormatRecognizer><![CDATA[<:gPatSyslogPRI>(?:Juniper|<:gPatMon>\s+<:gPatDay>\s+<:gPatTime>\s+<:gPatIpAddr>\s+Juniper|\s+<:gPatYear>-<:gPatMonNum>-<:gPatDay>T<:gPatTime><:gPatTimeZone>\s+):\s+<:gPatYear>-<:gPatMonNum>-<:gPatDay>\s+<:gPatTime> - <:gPatStr> - \[<:gPatIpAddr>\]]]></eventFormatRecognizer>
+<patternDefinitions>
+    <pattern name="patStrRightBracket"><![CDATA[[^\)]*]]></pattern>
+    <pattern name="patStrRightSquareBracket"><![CDATA[[^\]]*]]></pattern>
+    <pattern name="patStrRightSqos"><![CDATA[[^\']*]]></pattern>
+  </patternDefinitions>
+<parsingInstructions>
+    <!-- parsing common fields -->
+    <switch>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>Juniper: <_year:gPatYear>-<_mon:gPatMonNum>-<_day:gPatDay>\s+<_time:gPatTime> - <reptDevName:gPatStr> - \[<srcIpAddr:gPatIpAddr>\] <user:gPatStrLeftParen>\([^)]*\)\[<userGrp:gPatStrRightSB>\] - <_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+      </case>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI><:gPatMon>\s+<:gPatDay>\s+<:gPatTime>\s+<reptDevIpAddr:gPatIpAddr>\s+Juniper: <_year:gPatYear>-<_mon:gPatMonNum>-<_day:gPatDay>\s+<_time:gPatTime> - <reptDevName:gPatStr> - \[<srcIpAddr:gPatIpAddr>\] <user:gPatStrLeftParen>\([^)]*\)\[<userGrp:gPatStrRightSB>\] - <_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+      </case>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>\s+<:gPatYear>-<:gPatMonNum>-<:gPatDay>T<:gPatTime><:gPatTimeZone> : <_year:gPatYear>-<_mon:gPatMonNum>-<_day:gPatDay>\s+<_time:gPatTime> - <reptDevName:gPatStr> - \[<srcIpAddr:gPatIpAddr>\] <user:gPatStrLeftParen>\([^)]*\)\[<userGrp:gPatStrRightSB>\] - <_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+      </case>
+    </switch>
+
+    <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_year, $_time)</setEventAttribute>
+
+    <setEventAttribute attr="eventAction">0</setEventAttribute>
+    <setEventAttribute attr="eventType">"Juniper-SecureAccess-Generic"</setEventAttribute>
+    <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+
+    <choose>
+      <when test="matches($_body, 'Primary authentication')">
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Primary authentication <_status:gPatMesgBody> for <:gPatMesgBody> from <srcIpAddr:gPatIpAddr>]]></regex>
+        </collectFieldsByRegex>
+        <choose>
+          <when test="$_status = 'successful'">
+            <setEventAttribute attr="eventType">"Juniper-SecureAccess-VPN-Logon-Success"</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">4</setEventAttribute>
+          </when>
+          <when test="$_status = 'failed'">
+            <setEventAttribute attr="eventAction">1</setEventAttribute>
+            <setEventAttribute attr="eventType">"Juniper-SecureAccess-VPN-Logon-Failure"</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">6</setEventAttribute>
+          </when>
+        </choose>
+      </when>
+      <when test="matches($_body, '^Radius Server')">
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Radius Server SteelBelted:\s+Login <_status:gPatStr> for <:gPatStr> because host <srcIpAddr:gPatIpAddr>:<srcIpPort:gPatIpPort> .*]]></regex>
+        </collectFieldsByRegex>
+        <choose>
+          <when test="$_status = 'successful'">
+            <setEventAttribute attr="eventType">"Juniper-SecureAccess-Radius-Server-Logon-Success"</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">4</setEventAttribute>
+          </when>
+          <when test="$_status = 'failed'">
+            <setEventAttribute attr="eventAction">1</setEventAttribute>
+            <setEventAttribute attr="eventType">"Juniper-SecureAccess-Radius-Server-Logon-Failure"</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">6</setEventAttribute>
+          </when>
+        </choose>
+      </when>
+      <when test="matches($_body, 'Login failed')">
+        <setEventAttribute attr="eventAction">1</setEventAttribute>
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-VPN-Logon-Failure"</setEventAttribute>
+        <setEventAttribute attr="eventSeverity">6</setEventAttribute>
+        <when test="matches($_body, 'Administrators')">
+          <setEventAttribute attr="eventType">"Juniper-SecureAccess-Admin-Logon-Failure"</setEventAttribute>
+        </when>
+      </when>
+      <when test="matches($_body, 'Login succeeded')">
+        <switch>
+          <case>
+            <collectFieldsByRegex src="$_body">
+              <regex><![CDATA[Login succeeded for\s+<:gPatStr>\s+Users from <srcIpAddr:gPatIpAddr>\s+via internal port.]]></regex>
+            </collectFieldsByRegex>
+            <setEventAttribute attr="eventType">"Juniper-SecureAccess-Admin-Logon-Success"</setEventAttribute>
+          </case>
+          <case>
+            <collectFieldsByRegex src="$_body">
+              <regex><![CDATA[Login succeeded for <:gPatMesgBody> from <srcIpAddr:gPatIpAddr>.*]]></regex>
+            </collectFieldsByRegex>
+            <setEventAttribute attr="eventType">"Juniper-SecureAccess-VPN-Logon-Success"</setEventAttribute>
+          </case>
+        </switch>
+      </when>
+      <when test="matches($_body, 'Network Connect: Session ended')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-VPN-Logoff"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Network Connect: Session ended for user with IP <srcIpAddr:gPatIpAddr>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'Network Connect: Session started')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Session-Start"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Network Connect: Session started for user with IP <srcIpAddr:gPatIpAddr>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'Key Exchange')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Key-Exchange"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Key Exchange number <:gPatInt> occured for user with NCIP <srcIpAddr:gPatIpAddr>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'Number of concurrent users logged in')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Concurrent-Users-Login"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Number of concurrent users logged in to the device: <:gPatInt>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'Session timed out')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Session-Timeout"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Session timed out for <:gPatStr>.*]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'not authenticated')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Unauthenticated"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Connection from IP <srcIpAddr:gPatIpAddr> not authenticated yet.*]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'Network Connect: IP address cannot be allocated')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Failed-Allocate-IPAddress"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Network Connect: IP address cannot be allocated.*]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'Network Connect: No suitable')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Failed-Match-IPAddress"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Network Connect: No suitable.*]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'Deleted User')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-User-Deleted"</setEventAttribute>
+      </when>
+      <when test="matches($_body, 'Roles in Policy')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Roles-In-Policy-Modified"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Roles in Policy <:gPatStr> is modified from \[<:patStrRightSquareBracket>\] to \[<:patStrRightSquareBracket>\]]]></regex>
+        </collectFieldsByRegex>
+      </when>
+
+      <when test="matches($_body, 'Extra Action in Policy')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Extra-Action-In-Policy-Modified"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Extra Action in Policy \'<:patStrRightSqos>\' is modified to \[<:patStrRightSquareBracket>\]]]></regex>
+        </collectFieldsByRegex>
+      </when>
+
+      <when test="matches($_body, 'Action in Policy')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Action-In-Policy-Modified"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Action in Policy \'<:patStrRightSqos>\' is modified from \[<:patStrRightSquareBracket>\] to \[<:patStrRightSquareBracket>\]]]></regex>
+        </collectFieldsByRegex>
+      </when>
+
+      <when test="matches($_body, 'Resources in Policy')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Resource-In-Policy-Modified"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Resources in Policy \'<:patStrRightSqos>\' is modified from \[<:patStrRightSquareBracket>\] to \[<:patStrRightSquareBracket>\]]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'created')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Policy-Created"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Policy \'<:patStrRightSqos>\' is created]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'Logout')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-VPN-Logoff"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Logout from\s+<srcIpAddr:gPatIpAddr>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+
+      <when test="matches($_body, 'User Accounts modified')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-User-Modified"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[User Accounts modified. Added  with username\s+<user:gPatStr>\s+to.*]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'Remote address for user .* changed')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Remote-Address-Changed"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Remote address for user <:gPatStr> changed from <:gPatIpAddr> to <srcIpAddr:gPatIpAddr>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'SSL negotiation failed')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-SSL-Negotiation-Failed"</setEventAttribute>
+        <setEventAttribute attr="eventAction">1</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[SSL negotiation failed while client at source IP '<srcIpAddr:gPatIpAddr>' was trying to connect to '<destIpAddr:gPatIpAddr>'.*]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'Email address rejected')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Email-Address-Rejected"</setEventAttribute>
+        <setEventAttribute attr="eventAction">1</setEventAttribute>
+      </when>
+      <when test="matches($_body, 'SMTP email sender rejected')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Email-Sender-Rejected"</setEventAttribute>
+        <setEventAttribute attr="eventAction">1</setEventAttribute>
+      </when>
+      <when test="matches($_body, 'WebRequest Failed')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Web-Request-Failed"</setEventAttribute>
+        <setEventAttribute attr="eventAction">1</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[WebRequest Failed : Host: <destName:gPatStrComma>, Request: <infoURL:gPatStr>\s+.*]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'WebRequest ok')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Web-Request-OK"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[WebRequest ok : Host: <destName:gPatStrComma>, Request: <httpMethod:gPatStr> <infoURL:gPatStr>\s+HTTP/<httpVersion:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'WebRequest completed')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Web-Request-Completed"</setEventAttribute>
+        <switch>
+          <case>
+            <collectFieldsByRegex src="$_body">
+              <regex><![CDATA[WebRequest completed,\s+<httpMethod:gPatStr>\s+to\s+<infoURL:gPatStr>\s+.*?from\s+<srcIpAddr:gPatIpAddr>\s+result=<httpStatusCode:gPatInt>\s+sent=<sentBytes64:gPatInt>\s+received=<recvBytes64:gPatInt>\s+]]></regex>
+            </collectFieldsByRegex>
+          </case>
+          <case>
+            <collectFieldsByRegex src="$_body">
+              <regex><![CDATA[WebRequest completed,\s+<httpMethod:gPatStr>\s+to\s+<infoURL:gPatStr>\s+.*?from\s+<srcIpAddr:gPatIpAddr>]]></regex>
+            </collectFieldsByRegex>
+          </case>
+        </switch>
+      </when>
+      <when test="matches($_body, 'Web SSO: Authentication successful')">
+        <setEventAttribute attr="eventType">"Juniper-SecureAccess-Web-Auth-OK"</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Web SSO: Authentication successful. Credential Used: Username: <user:gPatStrComma>,\s+.*\s+Target:\s+<destName:gPatStrComma>,\s+.*]]></regex>
+        </collectFieldsByRegex>
+      </when>
+      <when test="matches($_body, 'VPN Tunneling: Session started')">
+        <setEventAttribute attr="eventType">Juniper-SecureAccess-Session-Start</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[VPN Tunneling: Session started for user with IPv4 address <postNATSrcIpAddr:gPatIpAddr>, hostname <hostName:gPatStr>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+
+      <when test="matches($_body, 'VPN Tunneling: Session ended')">
+        <setEventAttribute attr="eventType">Juniper-SecureAccess-VPN-Logoff</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[VPN Tunneling: Session ended for user with IPv4 address <srcIpAddr:gPatIpAddr>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+
+      <when test="matches($_body, 'Transport mode switched')">
+        <setEventAttribute attr="eventType">Juniper-SecureAccess-Transport-Switch</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Transport mode switched over to SSL for user with NCIP <srcIpAddr:gPatIpAddr>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+
+      <when test="matches($_body, 'User .* is accessing applet file')">
+        <setEventAttribute attr="eventType">Juniper-SecureAccess-File-Access</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[User '<user:patStrRightSqos>' is accessing applet file: '<fileName:patStrRightSqos>']]></regex>
+        </collectFieldsByRegex>
+      </when>
+
+      <when test="matches($_body, 'User Preferences affected')">
+        <setEventAttribute attr="eventType">Juniper-SecureAccess-Pref-Affected</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[User Preferences affected\. User <user:gPatStr> ]]></regex>
+        </collectFieldsByRegex>
+      </when>
+
+      <when test="matches($_body, 'Access blocked after DNS lookup')">
+        <setEventAttribute attr="eventType">Juniper-SecureAccess-Access-Blocked</setEventAttribute>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[Access blocked after DNS lookup\. Check Web ACL settings - Host: <hostName:gPatStrComma>, Request:\s*<httpMethod:gPatWord>\s+<uriStem:gPatStr>\s+HTTP/<httpVersion:gPatStr>]]></regex>
+        </collectFieldsByRegex>
+      </when>
+    </choose>
+
+    <when test="exist user">
+      <switch>
+        <case>
+          <collectFieldsByRegex src="$user">
+            <regex><![CDATA[<:gPatStr>::<domain:gPatStr>[\\]<user:gPatStr>]]></regex>
+          </collectFieldsByRegex>
+        </case>
+        <case>
+          <collectFieldsByRegex src="$user">
+            <regex><![CDATA[<domain:gPatStr>[\\]<user:gPatStr>]]></regex>
+          </collectFieldsByRegex>
+        </case>
+        <default/>
+      </switch>
+    </when>
+    <when test="not_private_ip destIpAddr">
+      <when test="exist destName">
+        <setEventAttribute attr="domainEntropy">calcDomainEntropy($destName)</setEventAttribute>
+      </when>
+    </when>
+  </parsingInstructions>
+

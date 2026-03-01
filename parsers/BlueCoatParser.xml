@@ -1,0 +1,148 @@
+<patternDefinitions>
+    <pattern name="patField"><![CDATA["[^"]*"|\S+]]></pattern>
+  </patternDefinitions>
+<eventFormatRecognizer><![CDATA[BluecoatWebLog]]></eventFormatRecognizer>
+<parsingInstructions>
+
+    <collectFieldsByRegex src="$_rawmsg">
+      <regex><![CDATA[<:gPatSyslogPRI>\s+<_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>\s+<:gPatHostName>\s+BluecoatWebLog\s+\d+\s+<_year:gPatYear>-<_mon:gPatMonNum>-<_day:gPatDay>\s+<_time:gPatTime>\s+<durationMSec:gPatInt>\s+<srcIpAddr:gPatIpAddr>\s+<_body:gPatMesgBody>]]></regex>
+    </collectFieldsByRegex>
+
+    <setEventAttribute attr="eventType">Bluecoat-SGOS-Generic</setEventAttribute>
+    <!-- parsing common fields -->
+    <choose>
+      <when test="matches($_body, '^#')"/>
+      <otherwise>
+        <switch>
+          <case>
+            <collectFieldsByRegex src="$_body">
+              <regex><![CDATA[^<httpStatusCode:gPatInt>\s+<httpProxyAction:patField>\s+<sentBytes64:gPatInt>\s+<recvBytes64:gPatInt>\s+<httpMethod:patField>\s+<_scheme:patField>\s+<destName:gPatHostName>\s+<destIpPort:gPatInt>\s+<uriStem:patField>\s+<uriQuery:patField>\s+<user:patField>\s+<userGrp:patField>\s+<_hierarchy:patField>\s+<_destIpAddr:patField>\s+<httpContentType:patField>\s+<httpReferrer:patField>\s+<httpUserAgent:patField>\s+<bcFilterResult:patField>\s+<webCategory:patField>\s+<virusName:patField>\s+<reptDevIpAddr:gPatIpAddr>]]></regex>
+            </collectFieldsByRegex>
+            <when test="$_destIpAddr != '-'">
+              <setEventAttribute attr="destIpAddr">$_destIpAddr</setEventAttribute>
+            </when>
+          </case>
+          <case>
+            <collectFieldsByRegex src="$_body">
+              <regex><![CDATA[^<user:patField>\s+<userGrp:patField>\s+<destDomain:gPatStr>\s+<destIpAddr:gPatIpAddr>\s+<:patField>\s+<:patField>\s+<:patField>\s+<bcFilterResult:patField>\s+<webCategory:patField>\s+<httpReferrer:patField>\s+<httpStatusCode:gPatInt>\s+<httpProxyAction:patField>\s+<httpMethod:patField>\s+<httpContentType:patField>\s+<_scheme:patField>\s+<destName:gPatHostName>\s+<destIpPort:gPatInt>\s+<uriStem:patField>\s+<uriQuery:patField>\s+<httpFileExt:patField>\s+<httpUserAgent:patField>\s+<:patField>\s+<recvBytes64:gPatInt>\s+<sentBytes64:gPatInt>\s+<virusName:patField>]]></regex>
+            </collectFieldsByRegex>
+          </case>
+          <default/>
+        </switch>
+
+        <when test="exist sentBytes64">
+          <when test="exist recvBytes64">
+            <setEventAttribute attr="totBytes64">add($sentBytes64, $recvBytes64)</setEventAttribute>
+          </when>
+        </when>
+
+        <when test="exist destIpAddr">
+          <when test="not_private_ip destIpAddr">
+            <when test="exist destName">
+              <setEventAttribute attr="domainEntropy">calcDomainEntropy($destName)</setEventAttribute>
+            </when>
+          </when>
+        </when>
+
+        <setEventAttribute attr="ipProto">convertStrToIntIpProto($_scheme)</setEventAttribute>
+
+        <choose>
+          <when test="exist _year">
+            <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_year, $_time)</setEventAttribute>
+          </when>
+          <otherwise>
+            <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_time)</setEventAttribute>
+          </otherwise>
+        </choose>
+
+        <setEventAttribute attr="eventAction">0</setEventAttribute>
+        <setEventAttribute attr="totFlows">1</setEventAttribute>
+
+        <choose>
+          <when test="not_exist httpStatusCode"/>
+          <when test="$httpStatusCode = '0'">
+            <choose>
+              <when test="$httpProxyAction IN 'DENIED,TCP_DENIED,UDP_DENIED,FAILED'">
+                <setEventAttribute attr="eventType">Bluecoat-SGOS-Web-Request-Denied</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+              </when>
+              <when test="$bcFilterResult = 'DENIED'">
+                <setEventAttribute attr="eventType">Bluecoat-SGOS-Web-Request-Denied</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+              </when>
+              <otherwise>
+                <setEventAttribute attr="eventType">Bluecoat-SGOS-Web-Request-Success</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+              </otherwise>
+            </choose>
+          </when>
+          <otherwise>
+            <when test="matches($httpStatusCode, '^2')">
+              <setEventAttribute attr="eventType">Bluecoat-SGOS-Web-Request-Success</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            </when>
+
+            <when test="matches($httpStatusCode, '^3')">
+              <setEventAttribute attr="eventType">Bluecoat-SGOS-Web-Request-Redirect</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            </when>
+
+            <when test="$httpStatusCode = '401'">
+              <setEventAttribute attr="eventType">Bluecoat-SGOS-Web-Client-Access-Denied</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+            </when>
+
+            <when test="$httpStatusCode = '403'">
+              <setEventAttribute attr="eventType">Bluecoat-SGOS-Web-Forbidden-Access-Denied</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+            </when>
+
+            <when test="$httpStatusCode = '400'">
+              <setEventAttribute attr="eventType">Bluecoat-SGOS-Web-Bad-Request</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+            </when>
+
+            <when test="$httpStatusCode = '411'">
+              <setEventAttribute attr="eventType">Bluecoat-SGOS-Web-Length-Reqd-Access-Denied</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+            </when>
+
+            <when test="matches($httpStatusCode, '^4')">
+              <setEventAttribute attr="eventType">Bluecoat-SGOS-Web-Client-Error</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+              <setEventAttribute attr="eventAction">1</setEventAttribute>
+            </when>
+
+            <when test="matches($httpStatusCode, '^5')">
+              <setEventAttribute attr="eventType">Bluecoat-SGOS-Web-Server-Error</setEventAttribute>
+              <setEventAttribute attr="eventSeverity">6</setEventAttribute>
+              <setEventAttribute attr="eventAction">1</setEventAttribute>
+            </when>
+          </otherwise>
+        </choose>
+
+        <when test="exist webCategory">
+          <switch>
+            <case>
+              <collectFieldsByRegex src="$webCategory">
+                <regex><![CDATA[^"<webCategory:gPatMesgBody>"$]]></regex>
+              </collectFieldsByRegex>
+            </case>
+            <default/>
+          </switch>
+        </when>
+
+        <when test="exist httpUserAgent">
+          <switch>
+            <case>
+              <collectFieldsByRegex src="$httpUserAgent">
+                <regex><![CDATA[^"<httpUserAgent:gPatMesgBody>"$]]></regex>
+              </collectFieldsByRegex>
+            </case>
+            <default/>
+          </switch>
+        </when>
+      </otherwise>
+    </choose>
+  </parsingInstructions>
+

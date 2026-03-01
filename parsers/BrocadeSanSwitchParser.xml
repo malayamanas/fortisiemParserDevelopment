@@ -1,0 +1,25 @@
+<eventFormatRecognizer><![CDATA[<:gPatYear>\s+<:gPatMon>\s+<:gPatDay>\s+<:gPatTime>\s+<:gPatStr>\s+(?:Security: \w+ (?:login|logout)|\w+ access) by \S+ from src IP <:gPatIpAddr>,]]></eventFormatRecognizer>
+<parsingInstructions>
+    <collectFieldsByRegex src="$_rawmsg">
+      <regex><![CDATA[<_year:gPatYear>\s+<_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>\s+<:gPatStr>\s+(?:Security: )?<appTransportProto:gPatWord> <_action:gPatWord> by <user:gPatStr> from src IP <srcIpAddr:gPatIpAddr>,\s+src MAC\s+<_mac:gPatStr>\s]]></regex>
+    </collectFieldsByRegex>
+
+    <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_year, $_time)</setEventAttribute>
+    <setEventAttribute attr="srcMACAddr">normalizeMAC($_mac)</setEventAttribute>
+
+    <choose>
+      <when test="$_action = 'login'">
+        <setEventAttribute attr="eventType">Brocade-SAN-Login-Success</setEventAttribute>
+      </when>
+      <when test="$_action = 'logout">
+        <setEventAttribute attr="eventType">Brocade-SAN-Logout</setEventAttribute>
+      </when>
+      <when test="$_action = 'access">
+        <setEventAttribute attr="eventType">Brocade-SAN-Login-Failed</setEventAttribute>
+      </when>
+      <otherwise>
+        <setEventAttribute attr="eventType">combineMsgId("Brocade-SAN-", $_action)</setEventAttribute>
+      </otherwise>
+    </choose>
+  </parsingInstructions>
+

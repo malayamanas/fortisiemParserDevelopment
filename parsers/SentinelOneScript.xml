@@ -1,0 +1,172 @@
+<patternDefinitions>
+	<pattern name="patExceptPipe">[^\|]+</pattern>
+	<pattern name="patStrEndQuote">[^"]+</pattern>
+</patternDefinitions>
+<eventFormatRecognizer>SentinelOne-&lt;_St:gPatStr&gt;\s+</eventFormatRecognizer>
+<parsingInstructions>
+	<switch>
+		<case>
+			<collectFieldsByRegex src="$_rawmsg">
+				<regex>SentinelOne-&lt;_St:gPatStr&gt;\s+\{ &lt;_body:gPatMesgBody&gt;\}</regex>
+			</collectFieldsByRegex>
+		</case>
+		<case>
+			<collectFieldsByRegex src="$_rawmsg">
+				<regex>SentinelOne-&lt;_St:gPatStr&gt;\s+&lt;_body:gPatMesgBody&gt;</regex>
+			</collectFieldsByRegex>
+		</case>
+	</switch>
+	<setEventAttribute attr="eventType">combineMsgId("SentinelOne", "-", $_St, "-", "General")</setEventAttribute>
+	<when test="not_matches($_body, '^{')">
+		<setEventAttribute attr="_body1">combineMsgId("{", $_body, "}")</setEventAttribute>
+		<collectAndSetAttrByJSON src="$_body1">
+			<attrKeyMap attr="status" key="status"/>
+		</collectAndSetAttrByJSON>
+	</when>
+	<collectAndSetAttrByJSON src="$_body">
+	    <attrKeyMap attr="threatId" key="threatId"/>
+	    <attrKeyMap attr="threatType" key="threatName"/>
+	    <attrKeyMap attr="classifier" key="classification"/>
+	    <attrKeyMap attr="confidence" key="confidenceLevel"/>
+	    <attrKeyMap attr="incidentStatus" key="incidentStatus"/>
+	    <attrKeyMap attr="analyticssubmit" key="analystVerdict"/>
+	    <attrKeyMap attr="filePath" key="filePath"/>
+	    <attrKeyMap attr="hashSHA256" key="sha256"/>
+	    <attrKeyMap attr="hashMD5" key="md5"/>
+	    <attrKeyMap attr="processUser" key="processUser"/>
+		<attrKeyMap attr="computerName" key="computerName"/>
+		<attrKeyMap attr="srcIpAddr" key="ipAddress"/>
+		<attrKeyMap attr="device_Name" key="deviceName"/>
+		<attrKeyMap attr="interface" key="interface"/>
+		<attrKeyMap attr="_eventType" key="eventType"/>
+		<attrKeyMap attr="eventTime" key="eventTime"/>
+		<attrKeyMap attr="lastLoggedInUserName" key="lastLoggedInUserName"/>
+		<attrKeyMap attr="groupName" key="groupName"/>
+		<attrKeyMap attr="siteName" key="siteName"/>
+		<attrKeyMap attr="product_id" key="productId"/>
+		<attrKeyMap attr="vendorId" key="vendorId"/>
+		<attrKeyMap attr="uid" key="uid"/>
+		<attrKeyMap attr="primaryDescription" key="primaryDescription"/>
+		<attrKeyMap attr="createdAt" key="createdAt"/>
+		<attrKeyMap attr="status" key="status"/>
+		<attrKeyMap attr="threatId" key="threatId"/>
+		<attrKeyMap attr="threatName" key="threatName"/>
+		<attrKeyMap attr="classification" key="classification"/>
+		<attrKeyMap attr="confidenceLevel" key="confidenceLevel"/>
+		<attrKeyMap attr="incidentStatus" key="incidentStatus"/>
+		<attrKeyMap attr="analystVerdict" key="analystVerdict"/>
+		<attrKeyMap attr="filePath" key="filePath"/>
+		<attrKeyMap attr="hashSHA256" key="sha256"/>
+		<attrKeyMap attr="hashMD5" key="md5"/>
+		<attrKeyMap attr="processUser" key="processUser"/>
+		<attrKeyMap attr="originatorProcess" key="originatorProcess"/>
+		<attrKeyMap attr="mitigationStatus" key="mitigationStatus"/>
+		<attrKeyMap attr="storyline" key="storyline"/>
+		<attrKeyMap attr="alertupdatedat" key="updatedAt"/>
+		<attrKeyMap attr="sessionAgentHostName" key="agentComputerName"/>
+		<attrKeyMap attr="domain" key="agentDomain"/>
+		<attrKeyMap attr="agentIP" key="agentIpV4"/>
+		<attrKeyMap attr="lastLoggedInUser" key="agentLastLoggedInUserName"/>
+		<attrKeyMap attr="osType" key="agentOsName"/>
+		<attrKeyMap attr="agentVersion" key="agentVersion"/>
+		<attrKeyMap attr="groupName" key="groupName"/>
+		<attrKeyMap attr="siteName" key="siteName"/>
+		<attrKeyMap attr="externalIp" key="externalIp"/>
+		<!-- Threat core -->
+        <attrKeyMap attr="threatId" key="threatId"/>
+        <attrKeyMap attr="threatName" key="threatName"/>
+        <attrKeyMap attr="classification" key="classification"/>
+        <attrKeyMap attr="confidence" key="confidenceLevel"/>
+        <attrKeyMap attr="incidentStatus" key="incidentStatus"/>
+        <attrKeyMap attr="analystVerdict" key="analystVerdict"/>
+        <!-- Time -->
+        <attrKeyMap attr="dbcreated" key="createdAt"/>
+        <attrKeyMap attr="updateTime" key="updatedAt"/>
+        <!-- Host / agent -->
+        <attrKeyMap attr="sessionAgentHostName" key="agentComputerName"/>
+        <attrKeyMap attr="domain" key="agentDomain"/>
+        <attrKeyMap attr="srcIpAddr" key="agentIpV4"/>
+        <attrKeyMap attr="osType" key="agentOsName"/>
+        <attrKeyMap attr="agentVersion" key="agentVersion"/>
+        <!-- User -->
+        <attrKeyMap attr="subjectUsername" key="agentLastLoggedInUserName"/>
+        <attrKeyMap attr="processUser" key="processUser"/>
+
+        <!-- Network -->
+        <attrKeyMap attr="externalIp" key="externalIp"/>
+
+        <!-- Incident correlation -->
+        <attrKeyMap attr="storyline" key="storyline"/>
+        <attrKeyMap attr="mitigationStatus" key="mitigationStatus"/>
+		
+		<!-- Indicator 1 -->
+		<attrKeyMap attr="category" key="indicators[0].category"/>
+		<attrKeyMap attr="InfostealerDescription" key="indicators[0].description"/>
+		<attrKeyMap attr="indicatorsid" key="indicators[0].ids[0]"/>
+		<attrKeyMap attr="tacticname" key="indicators[0].tactics[0].name"/>
+		<attrKeyMap attr="tacticSource" key="indicators[0].tactics[0].source"/>
+		<!-- Indicator 2 -->
+		<attrKeyMap attr="_category2" key="indicators[1].category"/>
+		<attrKeyMap attr="RansomwareDescription" key="indicators[1].description"/>
+		<attrKeyMap attr="_indicatorsid2" key="indicators[1].ids[0]"/>
+		<attrKeyMap attr="_indicatorsidtacticname2" key="indicators[1].tactics[0].name"/>
+		<attrKeyMap attr="_indicatorsidtacticsource2" key="indicators[1].tactics[0].source"/>
+		<!-- Indicator 3 -->
+		<attrKeyMap attr="_category3" key="indicators[2].category"/>
+		<attrKeyMap attr="description" key="indicators[2].description"/>
+		<attrKeyMap attr="_indicatorsid3" key="indicators[2].ids[0]"/>
+		<attrKeyMap attr="_indicatorsidtacticname3" key="indicators[2].tactics[0].name"/>
+		<attrKeyMap attr="_indicatorsidtacticsource3" key="indicators[2].tactics[0].source"/>
+		<attrKeyMap attr="_techniquesname" key="indicators[2].tactics[0].techniques[0].name"/>
+		<attrKeyMap attr="_techniqueslink" key="indicators[2].tactics[0].techniques[0].link"/>
+		<attrKeyMap attr="_techniquesname1" key="indicators[2].tactics[0].techniques[1].name"/>
+		<attrKeyMap attr="_techniqueslink" key="indicators[2].tactics[0].techniques[1].link"/>
+		<attrKeyMap attr="_techniquesname2" key="indicators[2].tactics[0].techniques[2].name"/>
+		<attrKeyMap attr="_techniqueslink" key="indicators[2].tactics[0].techniques[2].link"/>
+		<attrKeyMap attr="_indicatorsidtacticname3" key="indicators[2].tactics[1].name"/>
+		<attrKeyMap attr="_indicatorsidtacticsource3" key="indicators[2].tactics[1].source"/>
+		<attrKeyMap attr="_techniquesname" key="indicators[2].tactics[1].techniques[0].name"/>
+		<attrKeyMap attr="_techniqueslink" key="indicators[2].tactics[1].techniques[0].link"/>
+		<attrKeyMap attr="_techniquesname" key="indicators[2].tactics[1].techniques[1].name"/>
+		<attrKeyMap attr="_techniqueslink" key="indicators[2].tactics[1].techniques[1].link"/>
+		<!-- Indicator 4 -->
+		<attrKeyMap attr="_category4" key="indicators[3].category"/>
+		<attrKeyMap attr="ExecutionDescription" key="indicators[3].description"/>
+		<attrKeyMap attr="_indicatorsid4" key="indicators[3].ids[0]"/>
+		<attrKeyMap attr="_indicatorsidtacticname4" key="indicators[3].tactics[0].name"/>
+		<attrKeyMap attr="_indicatorsidtacticsource4" key="indicators[3].tactics[0].source"/>
+		<!-- Indicator 5 -->
+		<attrKeyMap attr="_category5" key="indicators[4].category"/>
+		<attrKeyMap attr="EvasionDescription" key="indicators[4].description"/>
+		<attrKeyMap attr="_indicatorsid5" key="indicators[4].ids[0]"/>
+		<attrKeyMap attr="_indicatorsidtacticname5" key="indicators[4].tactics[0].name"/>
+		<attrKeyMap attr="_indicatorsidtacticsource5" key="indicators[4].tactics[0].source"/>
+	</collectAndSetAttrByJSON>
+	<when test="exist primaryDescription">
+		<collectAndSetAttrByKeyValuePair sep="\n" src="$primaryDescription">
+			<attrKeyMap attr="actionTaken" key="Action Taken: "/>
+			<attrKeyMap attr="action" key="Action Taken: "/>
+			<attrKeyMap attr="alertType" key="Alert Type: "/>
+			<attrKeyMap attr="verdict" key="Verdict: "/>
+			<attrKeyMap attr="classification" key="Classification: "/>
+			<attrKeyMap attr="mitigationStatus" key="Mitigation: "/>
+			<attrKeyMap attr="summary" key="Summary: "/>
+		</collectAndSetAttrByKeyValuePair>
+	</when>
+	<when test="exist interface">
+		<when test="exist _eventType">
+			<setEventAttribute attr="eventType">combineMsgId("SentinelOne", "-", $_St, "-", $interface, "-", $_eventType)</setEventAttribute>
+			<setEventAttribute attr="action">$_eventType</setEventAttribute>
+		</when>
+	</when>
+	<when test="exist classification">
+		<setEventAttribute attr="eventType">combineMsgId("SentinelOne", "-", $_St, "-", $classification)</setEventAttribute>
+	</when>
+	<when test="exist status">
+		<when test="matches($status, 'no data')">
+			<setEventAttribute attr="eventType">SentinelOne-No-Data</setEventAttribute>
+		</when>
+	</when>
+	<setEventAttribute attr="reptVendor">SentinelOne</setEventAttribute>
+	<setEventAttribute attr="reptModel">Endpoint Protection Service</setEventAttribute>
+</parsingInstructions>

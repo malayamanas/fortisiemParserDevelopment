@@ -1,0 +1,60 @@
+<eventFormatRecognizer><![CDATA[ Morphisec-EPTP ]]></eventFormatRecognizer>
+
+<!-- Test Event
+2024-09-26 15:55:15 Morphisec-EPTP INFO MORPHISEC_ATTACK {"Account Id":"[\"0cebd16e-eba3-40a1-a2b6-88e9e20787d3\"]","Attack Module":"[\"kernel32.dll\"]","Attack Time":"[\"2024-09-26T15:54:54.494Z\"]","Code Processed":"[\"0x007ffe63158600 MOV RAX, RSP\"]","Command Line":"[\"C:/Users/shaned/Desktop/Fake Malicious File/winwword.exe\"]","Computer Name":"[\"GWLT011-02075\"]","File Hash":"[\"\"]","File Name":"[\"\"]","Last Module Loaded":"[\"0x00007FFE50830000 | 0x00007FFE50862000 | 0x32000 | 0x20 | C:/WINDOWS/SYSTEM32/dbgcore.DLL (FileDescription:Windows Core Debugging Helpers;ProductName:Microsoft® Windows® Operating System;VersionInfo:10.0.22621.1 (WinBuild.160101.0800);Timestamp:Sun Mar 9 22:12:15 1980;ASLR:Enabled)\"]","Last Stack FunctionCall":"[\"kernel32.dll| 0x0000000000068600 ( WinExec) | 0x00007FFE630F0000\"]","Logged In UserName":"[\"GWNT/shane.dickson\"]","Message":"[\"Morphisec prevented a threat on application winwword\"]","Morphisec Version":"[\"8.3.2\"]","Parent Process Command Line":"[\"C:/Windows/explorer.exe\"]","Parent Signature":"[\"359179ffb630953ee79523866a0a2246a5612d726c2eace52f7413f15530715e\"]","Process Signature":"[\"d3d97b6af2457c9a8c43cb3856ff227802dc928836638d8e71258c9167379168\"]","Protector IP":"[\"192.168.0.139\"]","Tenant Id":"[\"69068d46-d11d-4e81-af93-0b91bec183ef\"]","Threat Description":"[\"Morphisec Total Evasion Framework is a tool that contains several Pen-testing attack techniques that bypass all AV and EDR solutions.\"]","Threat Module":"[\"Shellcode\"]","Threat Name":"[\"Morphisec Total Evasion Framework\"]","Threat Severity":"[\"%!s(int=5)\"]","Threat Sub-Classification":"[\"Attack-Simulator\"]"}
+-->
+
+<parsingInstructions>
+
+<collectAndSetAttrByRegex src="$_rawmsg">
+  <regex><![CDATA[<_year:gPatYear>-<_mon:gPatMon>-<_day:gPatDay>\s+<_time:gPatTime>\s+Morphisec-EPTP\s+<_sev:gPatStr>\s+MORPHISEC_ATTACK\s+<_body:gPatMesgBody>]]></regex>
+</collectAndSetAttrByRegex>
+<setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_year, $_time)</setEventAttribute>
+
+<setEventAttribute attr="_body">replaceStringByRegex($_body, "\[", "")</setEventAttribute>
+<setEventAttribute attr="_body">replaceStringByRegex($_body, "\]", "")</setEventAttribute>
+
+<collectAndSetAttrByJSON src="$_body">
+	<attrKeyMap attr="accountId" key="Account Id"/>
+	<attrKeyMap attr="_Attack Module" key="Attack Module"/>
+	<attrKeyMap attr="_Attack Time" key="Attack Time"/>
+	<attrKeyMap attr="_Code Processed" key="Code Processed"/>
+	<attrKeyMap attr="command" key="Command Line"/>
+	<attrKeyMap attr="_Computer Name" key="Computer Name"/>
+	<attrKeyMap attr="_File Hash" key="File Hash"/>
+	<attrKeyMap attr="_File Name" key="File Name"/>
+	<attrKeyMap attr="_Last Module Loaded" key="Last Module Loaded"/>
+	<attrKeyMap attr="_Last Stack FunctionCall" key="Last Stack FunctionCall"/>
+	<attrKeyMap attr="_Logged In UserName" key="Logged In UserName"/>
+	<attrKeyMap attr="msg" key="Message"/>
+	<attrKeyMap attr="_Morphisec Version" key="Morphisec Version"/>
+	<attrKeyMap attr="_Parent Process Command Line" key="Parent Process Command Line"/>
+	<attrKeyMap attr="_Parent Signature" key="Parent Signature"/>
+	<attrKeyMap attr="_Process Signature" key="Process Signature"/>
+	<attrKeyMap attr="_Protector IP" key="Protector IP"/>
+	<attrKeyMap attr="_Tenant Id" key="Tenant Id"/>
+	<attrKeyMap attr="_Threat Description" key="Threat Description"/>
+	<attrKeyMap attr="_Threat Module" key="Threat Module"/>
+	<attrKeyMap attr="virusName" key="Threat Name"/>
+	<attrKeyMap attr="threatLevel" key="Threat Severity"/>
+	<attrKeyMap attr="_Threat Sub-Classification" key="Threat Sub-Classification"/>
+</collectAndSetAttrByJSON>
+
+<setEventAttribute attr="eventType">Morphisec-Attack</setEventAttribute>
+<setEventAttribute attr="eventSeverity">1</setEventAttribute>
+
+<!-- Remove Double Quotes Around Values Example -->
+<when test="exist accountId">
+  <setEventAttribute attr="accountId">replaceStringByRegex($accountId, "\"", "")</setEventAttribute>
+</when>
+
+
+<when test="exist _sev">
+  <choose>
+    <when test="$_sev = 'INFO'">
+      <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+    </when>
+  </choose>
+</when>
+
+</parsingInstructions>

@@ -1,0 +1,3349 @@
+<eventFormatRecognizer><![CDATA[\s+FSM-WUA-WinLog(?:\s|-\w)]]></eventFormatRecognizer>
+<patternDefinitions>
+	<pattern name="patStrAt"><![CDATA[[^@]*]]></pattern>
+	<pattern name="patStrDollar"><![CDATA[[^$]+]]></pattern>
+	<pattern name="patStrQuote"><![CDATA[[^']*]]></pattern>
+	<pattern name="patStrDot"><![CDATA[[^.]+]]></pattern>
+	<pattern name="patToRightBracket"><![CDATA[[^)]+\)]]></pattern>
+	<pattern name="patTab"><![CDATA[[^\t]+]]></pattern>
+	<pattern name="patStrRightParen"><![CDATA[[^\)]*]]></pattern>
+	<pattern name="patDNSAction"><![CDATA[created|deleted|updated]]></pattern>
+	<pattern name="patStrLB"><![CDATA[[^\[]*]]></pattern>
+	<pattern name="patComma"><![CDATA[[^,]*]]></pattern>
+	<pattern name="patLdapCN"><![CDATA[[^,\\]*(?:\\.[^,\\]*)*]]></pattern>
+</patternDefinitions>
+<parsingInstructions>
+	<collectFieldsByRegex src="$_rawmsg">
+		<regex><![CDATA[<_year:gPatYear>-<_mon:gPatMonNum>-<_day:gPatDay>T<_time:gPatTime><_tz:gPatTimeZone>\s+<reptDevName:gPatHostName>\s+<reptDevIpAddr:gPatIpAddr>\s+FSM-WUA-WinLog(?:-<subtype:patStrLB>)?\s+<_body:gPatMesgBodyMin>(?:\s+\[xml\]=<_xml:gPatMesgBodyMin>)?\s*$]]></regex>
+	</collectFieldsByRegex>
+	<setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_year, $_time, $_tz)</setEventAttribute>
+	<setEventAttribute attr="relayDevIpAddr">$reptDevIpAddr</setEventAttribute>
+	<setEventAttribute attr="relayDevName">$reptDevName</setEventAttribute>
+	<collectAndSetAttrByKeyValuePair sep=" [" src="$_body">
+		<attrKeyMap attr="computer" key="[computer]="/>
+		<attrKeyMap attr="customer" key="[customer]="/>
+		<attrKeyMap attr="_eventTime" key="[deviceTime]="/>
+		<attrKeyMap attr="domain" key="[domain]="/>
+		<attrKeyMap attr="errorString" key="[errorString]="/>
+		<attrKeyMap attr="winEventId" key="[eventId]="/>
+		<attrKeyMap attr="activityType" key="[eventName]="/>
+		<attrKeyMap attr="eventSource" key="[eventSource]="/>
+		<attrKeyMap attr="_eventTime" key="[eventTime]="/>
+		<attrKeyMap attr="extEventRecvProto" key="[extEventRecvProto]="/>
+		<attrKeyMap attr="_severity" key="[level]="/>
+		<attrKeyMap attr="type" key="[monitorStatus]="/>
+		<attrKeyMap attr="_msg" key="[msg]="/>
+		<attrKeyMap attr="phCustId" key="[phCustId]="/>
+		<attrKeyMap attr="_user" key="[user]="/>
+		<attrKeyMap attr="securityId" key="[userSID]="/>
+	</collectAndSetAttrByKeyValuePair>
+	<when test="exist _xml">
+		<setEventAttribute attr="_xml">replaceStringByRegex($_xml, "\s+xmlns='[^']*'|&lt;\?xml .*?\?&gt;", "")</setEventAttribute>
+		<collectFieldsByXPath src="$_xml">
+			<attrKeyMap attr="_type" key="/Event/RenderingInfo/Keywords/Keyword"/>
+			<attrKeyMap attr="_severity" key="/Event/RenderingInfo/Level"/>
+			<attrKeyMap attr="_msg" key="/Event/RenderingInfo/Message"/>
+			<attrKeyMap attr="_task" key="/Event/RenderingInfo/Task"/>
+			<attrKeyMap attr="activityType" key="/Event/System/Channel"/>
+			<attrKeyMap attr="computer" key="/Event/System/Computer"/>
+			<attrKeyMap attr="srcName" key="/Event/System/Computer"/>
+			<attrKeyMap attr="hostName" key="/Event/System/Computer"/>
+			<attrKeyMap attr="winEventId" key="/Event/System/EventID"/>
+			<attrKeyMap attr="seqNum" key="/Event/System/EventRecordID"/>
+			<!-- FIX-4: Restored correlationId from ActivityID (present in stock, dropped in ALI).
+		 Links related events like logon+token elevation pairs. -->
+			<attrKeyMap attr="correlationId" key="/Event/System/Correlation/@ActivityID"/>
+			<attrKeyMap attr="eventSource" key="/Event/System/Provider/@Name"/>
+			<attrKeyMap attr="securityId" key="/Event/System/Security/@UserID"/>
+			<attrKeyMap attr="_eventTime" key="/Event/System/TimeCreated/@SystemTime"/>
+			<attrKeyMap attr="_srcAddr" key="/Event/UserData/EventXML/Address"/>
+			<attrKeyMap attr="_reason" key="/Event/UserData/EventXML/Reason"/>
+			<attrKeyMap attr="sessionId" key="/Event/UserData/EventXML/Session"/>
+			<attrKeyMap attr="sessionId" key="/Event/UserData/EventXML/SessionID"/>
+			<attrKeyMap attr="user" key="/Event/UserData/EventXML/User"/>
+			<attrKeyMap attr="_subjectDomainName" key="/Event/UserData/LogFileCleared/SubjectDomainName"/>
+			<attrKeyMap attr="MemberSid" key="/Event/EventData/Data[@Name='MemberSid']"/>
+			<attrKeyMap attr="winLogonId" key="/Event/UserData/LogFileCleared/SubjectLogonId"/>
+			<attrKeyMap attr="_subjectUserName" key="/Event/UserData/LogFileCleared/SubjectUserName"/>
+			<attrKeyMap attr="securityId" key="/Event/UserData/LogFileCleared/SubjectUserSid"/>
+			<attrKeyMap attr="osObjAccessType" key="/Event/EventData/Data[@Name='AccessGranted']"/>
+			<attrKeyMap attr="osObjAccessType" key="/Event/EventData/Data[@Name='AccessList']"/>
+			<attrKeyMap attr="accessMask" key="/Event/EventData/Data[@Name='AccessMask']"/>
+			<attrKeyMap attr="reason" key="/Event/EventData/Data[@Name='AccessReason']"/>
+			<attrKeyMap attr="osObjAccessType" key="/Event/EventData/Data[@Name='AccessRemoved']"/>
+			<attrKeyMap attr="_accountDomain" key="/Event/EventData/Data[@Name='AccountDomain']"/>
+			<attrKeyMap attr="_accountExpires" key="/Event/EventData/Data[@Name='AccountExpires']"/>
+			<attrKeyMap attr="_accountName" key="/Event/EventData/Data[@Name='AccountName']"/>
+			<attrKeyMap attr="profileName" key="/Event/EventData/Data[@Name='ActiveProfile']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='AddedCAPs']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='Additional Info2']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='AdditionalInfo']"/>
+			<attrKeyMap attr="_advancedOptions" key="/Event/EventData/Data[@Name='AdvancedOptions']"/>
+			<attrKeyMap attr="_allowedToDelegateTo" key="/Event/EventData/Data[@Name='AllowedToDelegateTo']"/>
+			<attrKeyMap attr="correlationId" key="/Event/EventData/Data[@Name='AppCorrelationID']"/>
+			<attrKeyMap attr="appName" key="/Event/EventData/Data[@Name='Application']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='AsIsCAPs']"/>
+			<attrKeyMap attr="propName" key="/Event/EventData/Data[@Name='AttributeLDAPDisplayName']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='AttributeSyntaxOID']"/>
+			<attrKeyMap attr="propValue" key="/Event/EventData/Data[@Name='AttributeValue']"/>
+			<attrKeyMap attr="actionName" key="/Event/EventData/Data[@Name='AuditPolicyChanges']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='AuditSourceName']"/>
+			<attrKeyMap attr="authenMethod" key="/Event/EventData/Data[@Name='AuthenticationPackageName']"/>
+			<attrKeyMap attr="procId" key="/Event/EventData/Data[@Name='CallerProcessId']"/>
+			<attrKeyMap attr="procId" key="/Event/EventData/Data[@Name='ClientProcessId']"/>
+			<attrKeyMap attr="_sysKeywords" key="/Event/System/Keywords"/>
+			<!-- While the Process ID may be reused within a session, the Process Start Key is guaranteed to be unique in the current boot session. -->
+			<attrKeyMap attr="_clientStartKey" key="/Event/EventData/Data[@Name='ClientProcessStartKey']"/>
+			<attrKeyMap attr="procName" key="/Event/EventData/Data[@Name='CallerProcessName']"/>
+			<attrKeyMap attr="callTrace" key="/Event/EventData/Data[@Name='CallTrace']"/>
+			<attrKeyMap attr="procPath" key="/Event/EventData/Data[@Name='CallTrace']"/>
+			<attrKeyMap attr="appCategory" key="/Event/EventData/Data[@Name='CategoryId']"/>
+			<attrKeyMap attr="tlsServerIssuer" key="/Event/EventData/Data[@Name='CertIssuerName']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='CertSerialNumber']"/>
+			<attrKeyMap attr="certThumbprint" key="/Event/EventData/Data[@Name='CertThumbprint']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ClassId']"/>
+			<attrKeyMap attr="deviceType" key="/Event/EventData/Data[@Name='ClassName']"/>
+			<attrKeyMap attr="srcIpAddr" key="/Event/EventData/Data[@Name='ClientAddress']"/>
+			<attrKeyMap attr="srcName" key="/Event/EventData/Data[@Name='ClientName']"/>
+			<attrKeyMap attr="_clientUserName" key="/Event/EventData/Data[@Name='ClientUserName']"/>
+			<attrKeyMap attr="command" key="/Event/EventData/Data[@Name='CommandLine']"/>
+			<attrKeyMap attr="company" key="/Event/EventData/Data[@Name='Company']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='CompatibleIds']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ComputerAccountChange']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ComputerName']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ConfigAccessPolicy']"/>
+			<attrKeyMap attr="configValue" key="/Event/EventData/Data[@Name='Configuration']"/>
+			<attrKeyMap attr="_hash" key="/Event/EventData/Data[@Name='ConfigurationFileHash']"/>
+			<attrKeyMap attr="dirName" key="/Event/EventData/Data[@Name='CurrentDirectory']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='DeletedCAPs']"/>
+			<attrKeyMap attr="description" key="/Event/EventData/Data[@Name='Description']"/>
+			<attrKeyMap attr="destIpAddr" key="/Event/EventData/Data[@Name='DestAddress']"/>
+			<attrKeyMap attr="destFilePath" key="/Event/EventData/Data[@Name='Destination']"/>
+			<attrKeyMap attr="destName" key="/Event/EventData/Data[@Name='DestinationHostname']"/>
+			<attrKeyMap attr="destIpAddr" key="/Event/EventData/Data[@Name='DestinationIp']"/>
+			<attrKeyMap attr="isIpv6" key="/Event/EventData/Data[@Name='DestinationIsIpv6']"/>
+			<attrKeyMap attr="destIpPort" key="/Event/EventData/Data[@Name='DestinationPort']"/>
+			<attrKeyMap attr="destIpPort" key="/Event/EventData/Data[@Name='DestPort']"/>
+			<attrKeyMap attr="details" key="/Event/EventData/Data[@Name='Details']"/>
+			<attrKeyMap attr="deviceIdentification" key="/Event/EventData/Data[@Name='Device']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='DeviceClaims']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='DeviceDescription']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='DeviceId']"/>
+			<attrKeyMap attr="direction" key="/Event/EventData/Data[@Name='Direction']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='DisabledPrivilegeList']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='DisableIntegrityChecks']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='DisplayName']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='DnsHostName']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='DomainBehaviorVersion']"/>
+			<attrKeyMap attr="domain" key="/Event/EventData/Data[@Name='DomainName']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='DomainPolicyChanged']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='DomainSid']"/>
+			<attrKeyMap attr="targetDomain" key="/Event/EventData/Data[@Name='DSName']"/>
+			<attrKeyMap attr="serviceType" key="/Event/EventData/Data[@Name='DSType']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='Dummy']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='Duration']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ElevatedToken']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='EnabledPrivilegeList']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='EventCount']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='EventCountTotal']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='EventId']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='EventIdx']"/>
+			<attrKeyMap attr="namespace" key="/Event/EventData/Data[@Name='EventNamespace']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='EventSourceId']"/>
+			<attrKeyMap attr="osObjAction" key="/Event/EventData/Data[@Name='EventType']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='FailurePoint']"/>
+			<attrKeyMap attr="errReason" key="/Event/EventData/Data[@Name='FailureReason']"/>
+			<attrKeyMap attr="fileName" key="/Event/EventData/Data[@Name='FileName']"/>
+			<attrKeyMap attr="fileVersion" key="/Event/EventData/Data[@Name='FileVersion']"/>
+			<attrKeyMap attr="filter" key="/Event/EventData/Data[@Name='Filter']"/>
+			<attrKeyMap attr="filterId" key="/Event/EventData/Data[@Name='FilterRTID']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='FlightSigning']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ForceLogoff']"/>
+			<attrKeyMap attr="accessKeyId" key="/Event/EventData/Data[@Name='GrantedAccess']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='GroupMembership']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='GroupPolicyApplied']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='GroupTypeChange']"/>
+			<attrKeyMap attr="osObjHandleID" key="/Event/EventData/Data[@Name='HandleId']"/>
+			<attrKeyMap attr="_hash" key="/Event/EventData/Data[@Name='Hash']"/>
+			<attrKeyMap attr="_hash" key="/Event/EventData/Data[@Name='Hashes']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='HomeDirectory']"/>
+			<attrKeyMap attr="filePath" key="/Event/EventData/Data[@Name='HomePath']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='HypervisorDebug']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='HypervisorLaunchType']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='HypervisorLoadOptions']"/>
+			<attrKeyMap attr="msgId" key="/Event/EventData/Data[@Name='ID']"/>
+			<attrKeyMap attr="procName" key="/Event/EventData/Data[@Name='Image']"/>
+			<attrKeyMap attr="loadedProcName" key="/Event/EventData/Data[@Name='ImageLoaded']"/>
+			<attrKeyMap attr="serviceFileName" key="/Event/EventData/Data[@Name='ImagePath']"/>
+			<attrKeyMap attr="permissionLevelID" key="/Event/EventData/Data[@Name='ImpersonationLevel']"/>
+			<attrKeyMap attr="initiated" key="/Event/EventData/Data[@Name='Initiated']"/>
+			<attrKeyMap attr="cookie" key="/Event/EventData/Data[@Name='InitiatorCookie']"/>
+			<attrKeyMap attr="integrityLevel" key="/Event/EventData/Data[@Name='IntegrityLevel']"/>
+			<attrKeyMap attr="_ipAddr" key="/Event/EventData/Data[@Name='IpAddress']"/>
+			<attrKeyMap attr="_ipPort" key="/Event/EventData/Data[@Name='IpPort']"/>
+			<attrKeyMap attr="_ipPort1" key="/Event/EventData[@Name='IpPort']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='KerberosPolicyChange']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='KernelDebug']"/>
+			<attrKeyMap attr="msgLen" key="/Event/EventData/Data[@Name='KeyLength']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='KeyModName']"/>
+			<attrKeyMap attr="layerName" key="/Event/EventData/Data[@Name='LayerName']"/>
+			<attrKeyMap attr="permissionLevelID" key="/Event/EventData/Data[@Name='LayerRTID']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='LinkName']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='LmPackageName']"/>
+			<attrKeyMap attr="options" key="/Event/EventData/Data[@Name='LoadOptions']"/>
+			<attrKeyMap attr="srcIpAddr" key="/Event/EventData/Data[@Name='LocalAddress']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='LocalKeyModPort']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='LocalMMPrincipalName']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='LocationInformation']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='LockoutDuration']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='LockoutObservationWindow']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='LockoutThreshold']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='LogDroppedPacketsEnabled']"/>
+			<attrKeyMap attr="winLogonGUID" key="/Event/EventData/Data[@Name='LogonGuid']"/>
+			<attrKeyMap attr="logonHours" key="/Event/EventData/Data[@Name='LogonHours']"/>
+			<attrKeyMap attr="winLogonId" key="/Event/EventData/Data[@Name='LogonId']"/>
+			<attrKeyMap attr="winLogonId" key="/Event/EventData/Data[@Name='LogonID']"/>
+			<attrKeyMap attr="winLogonProc" key="/Event/EventData/Data[@Name='LogonProcessName']"/>
+			<attrKeyMap attr="winLogonType" key="/Event/EventData/Data[@Name='LogonType']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='LogSuccessfulConnectionsEnabled']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='MachineAccountQuota']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='MandatoryLabel']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='MappedName']"/>
+			<attrKeyMap attr="authenMethod" key="/Event/EventData/Data[@Name='MappingBy']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='MasterKeyId']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='MaxPasswordAge']"/>
+			<attrKeyMap attr="_memberName" key="/Event/EventData/Data[@Name='MemberName']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='MinPasswordAge']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='MinPasswordLength']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='MixedDomainMode']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='MMAuthMethod']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='MMFilterID']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='MMImpersonationState']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ModifiedCAPs']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='MulticastFlowsEnabled']"/>
+			<attrKeyMap attr="paraName" key="/Event/EventData/Data[@Name='Name']"/>
+			<attrKeyMap attr="nepDevIpAddr" key="/Event/EventData/Data[@Name='NASIPv6Address']"/>
+			<attrKeyMap attr="nepDevIpAddr" key="/Event/EventData/Data[@Name='NASIPv4Address']"/>
+			<attrKeyMap attr="nasId" key="/Event/EventData/Data[@Name='NASIdentifier']"/>
+			<attrKeyMap attr="nasPortType" key="/Event/EventData/Data[@Name='NASPortType']"/>
+			<attrKeyMap attr="nepDevPort" key="/Event/EventData/Data[@Name='NASPort']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='NewMaxUsers']"/>
+			<attrKeyMap attr="newObjValue" key="/Event/EventData/Data[@Name='NewName']"/>
+			<attrKeyMap attr="newRegValue" key="/Event/EventData/Data[@Name='NewName']"/>
+			<attrKeyMap attr="procId" key="/Event/EventData/Data[@Name='NewProcessId']"/>
+			<attrKeyMap attr="procName" key="/Event/EventData/Data[@Name='NewProcessName']"/>
+			<attrKeyMap attr="comment" key="/Event/EventData/Data[@Name='NewRemark']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='NewSD']"/>
+			<attrKeyMap attr="newSecurityDescriptor" key="/Event/EventData/Data[@Name='NewSd']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='NewShareFlags']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='NewState']"/>
+			<attrKeyMap attr="targetUser" key="/Event/EventData/Data[@Name='NewTargetUserName']"/>
+			<attrKeyMap attr="threadId" key="/Event/EventData/Data[@Name='NewThreadId']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='NewTime']"/>
+			<attrKeyMap attr="_newUacValue" key="/Event/EventData/Data[@Name='NewUacValue']"/>
+			<attrKeyMap attr="newObjValue" key="/Event/EventData/Data[@Name='NewValue']"/>
+			<attrKeyMap attr="newValueType" key="/Event/EventData/Data[@Name='NewValueType']"/>
+			<attrKeyMap attr="procName" key="/Event/EventData/Data[@Name='NotificationPackageName']"/>
+			<attrKeyMap attr="classifier" key="/Event/EventData/Data[@Name='ObjectClass']"/>
+			<attrKeyMap attr="userDN" key="/Event/EventData/Data[@Name='ObjectDN']"/>
+			<attrKeyMap attr="_machineGUID" key="/Event/EventData/Data[@Name='ObjectGUID']"/>
+			<attrKeyMap attr="osObjName" key="/Event/EventData/Data[@Name='ObjectName']"/>
+			<attrKeyMap attr="serverName" key="/Event/EventData/Data[@Name='ObjectServer']"/>
+			<attrKeyMap attr="osObjType" key="/Event/EventData/Data[@Name='ObjectType']"/>
+			<attrKeyMap attr="osObjValue" key="/Event/EventData/Data[@Name='ObjectValueName']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='OemInformation']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='OldMaxUsers']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='OldRemark']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='OldSD']"/>
+			<attrKeyMap attr="originalSecurityDescriptor" key="/Event/EventData/Data[@Name='OldSd']"/>
+			<attrKeyMap attr="flag" key="/Event/EventData/Data[@Name='OldShareFlags']"/>
+			<attrKeyMap attr="oldTargetUser" key="/Event/EventData/Data[@Name='OldTargetUserName']"/>
+			<attrKeyMap attr="_oldUacValue" key="/Event/EventData/Data[@Name='OldUacValue']"/>
+			<attrKeyMap attr="oldObjValue" key="/Event/EventData/Data[@Name='OldValue']"/>
+			<attrKeyMap attr="oldValueType" key="/Event/EventData/Data[@Name='OldValueType']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='OpCorrelationID']"/>
+			<attrKeyMap attr="opName" key="/Event/EventData/Data[@Name='Operation']"/>
+			<attrKeyMap attr="operationalState" key="/Event/EventData/Data[@Name='OperationMode']"/>
+			<attrKeyMap attr="osObjAction" key="/Event/EventData/Data[@Name='OperationType']"/>
+			<attrKeyMap attr="srcFileName" key="/Event/EventData/Data[@Name='OriginalFileName']"/>
+			<attrKeyMap attr="authenMethod" key="/Event/EventData/Data[@Name='PackageName']"/>
+			<attrKeyMap attr="_param1" key="/Event/EventData/Data[@Name='param1']"/>
+			<attrKeyMap attr="_param2" key="/Event/EventData/Data[@Name='param2']"/>
+			<attrKeyMap attr="_param3" key="/Event/EventData/Data[@Name='param3']"/>
+			<attrKeyMap attr="_param4" key="/Event/EventData/Data[@Name='param4']"/>
+			<attrKeyMap attr="_param5" key="/Event/EventData/Data[@Name='param5']"/>
+			<attrKeyMap attr="_param6" key="/Event/EventData/Data[@Name='param6']"/>
+			<attrKeyMap attr="_param7" key="/Event/EventData/Data[@Name='param7']"/>
+			<attrKeyMap attr="parentCommand" key="/Event/EventData/Data[@Name='ParentCommandLine']"/>
+			<attrKeyMap attr="parentProcName" key="/Event/EventData/Data[@Name='ParentImage']"/>
+			<attrKeyMap attr="parentProcGUID" key="/Event/EventData/Data[@Name='ParentProcessGuid']"/>
+			<attrKeyMap attr="parentProcId" key="/Event/EventData/Data[@Name='ParentProcessId']"/>
+			<attrKeyMap attr="parentProcName" key="/Event/EventData/Data[@Name='ParentProcessName']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='PasswordHistoryLength']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='PasswordLastSet']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='PasswordProperties']"/>
+			<attrKeyMap attr="pipeName" key="/Event/EventData/Data[@Name='PipeName']"/>
+			<attrKeyMap attr="vpnTunnelName" key="/Event/EventData/Data[@Name='PipeName']"/>
+			<attrKeyMap attr="PreAuthType" key="/Event/EventData/Data[@Name='PreAuthType']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='PreviousTime']"/>
+			<attrKeyMap attr="groupID" key="/Event/EventData/Data[@Name='PrimaryGroupId']"/>
+			<attrKeyMap attr="privName" key="/Event/EventData/Data[@Name='PrivilegeList']"/>
+			<attrKeyMap attr="procGUID" key="/Event/EventData/Data[@Name='ProcessGuid']"/>
+			<attrKeyMap attr="procId" key="/Event/EventData/Data[@Name='ProcessID']"/>
+			<attrKeyMap attr="procId" key="/Event/EventData/Data[@Name='ProcessId']"/>
+			<attrKeyMap attr="procName" key="/Event/EventData/Data[@Name='ProcessName']"/>
+			<attrKeyMap attr="product" key="/Event/EventData/Data[@Name='Product']"/>
+			<attrKeyMap attr="profileName" key="/Event/EventData/Data[@Name='Profile']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ProfileChanged']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ProfilePath']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ProfileUsed']"/>
+			<attrKeyMap attr="propName" key="/Event/EventData/Data[@Name='Properties']"/>
+			<attrKeyMap attr="srcProto" key="/Event/EventData/Data[@Name='Protocol']"/>
+			<attrKeyMap attr="_proto" key="/Event/EventData/Data[@Name='Protocol']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='PuaCount']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='PuaPolicyId']"/>
+			<attrKeyMap attr="queryId" key="/Event/EventData/Data[@Name='Query']"/>
+			<attrKeyMap attr="destName" key="/Event/EventData/Data[@Name='QueryName']"/>
+			<attrKeyMap attr="queryId" key="/Event/EventData/Data[@Name='QueryName']"/>
+			<attrKeyMap attr="destIpAddrList" key="/Event/EventData/Data[@Name='QueryResults']"/>
+			<attrKeyMap attr="dnsQueryType" key="/Event/EventData/Data[@Name='QueryStatus']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ReasonForRejection']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='RecoveryKeyId']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='RecoveryReason']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='RecoveryServer']"/>
+			<attrKeyMap attr="targetName" key="/Event/EventData/Data[@Name='RelativeTargetName']"/>
+			<attrKeyMap attr="srcIpAddr" key="/Event/EventData/Data[@Name='RemoteAddress']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='RemoteAdminEnabled']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='RemoteEventLogging']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='RemoteKeyModPort']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='RemoteMachineID']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='RemoteMMPrincipalName']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='RemoteUserID']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='RequestType']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='Resource Attributes']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ResourceAttributes']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ResourceManager']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ResponderCookie']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='RestrictedAdminMode']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='RestrictedSidCount']"/>
+			<attrKeyMap attr="role" key="/Event/EventData/Data[@Name='Role']"/>
+			<attrKeyMap attr="reason" key="/Event/EventData/Data[@Name='RuleAttr']"/>
+			<attrKeyMap attr="ruleIdStr" key="/Event/EventData/Data[@Name='RuleId']"/>
+			<attrKeyMap attr="ruleName" key="/Event/EventData/Data[@Name='RuleName']"/>
+			<attrKeyMap attr="SamAccountName" key="/Event/EventData/Data[@Name='SamAccountName']"/>
+			<attrKeyMap attr="schemaName" key="/Event/EventData/Data[@Name='SchemaVersion']"/>
+			<attrKeyMap attr="script" key="/Event/EventData/Data[@Name='ScriptBlockText']"/>
+			<attrKeyMap attr="commandPath" key="/Event/EventData/Data[@Name='ScriptPath']"/>
+			<!-- will be event specific to distinguish user sid from object sid etc -->
+			<attrKeyMap attr="_securityId" key="/Event/EventData/Data[@Name='Security ID']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='SecurityPackageName']"/>
+			<attrKeyMap attr="serviceName" key="/Event/EventData/Data[@Name='Service']"/>
+			<attrKeyMap attr="serviceAccount" key="/Event/EventData/Data[@Name='ServiceAccount']"/>
+			<attrKeyMap attr="serviceFileName" key="/Event/EventData/Data[@Name='ServiceFileName']"/>
+			<attrKeyMap attr="serviceName" key="/Event/EventData/Data[@Name='ServiceName']"/>
+			<attrKeyMap attr="principal" key="/Event/EventData/Data[@Name='ServicePrincipalNames']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='ServiceSid']"/>
+			<attrKeyMap attr="serviceStartType" key="/Event/EventData/Data[@Name='ServiceStartType']"/>
+			<attrKeyMap attr="serviceType" key="/Event/EventData/Data[@Name='ServiceType']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='SessionId']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='SessionName']"/>
+			<attrKeyMap attr="opName" key="/Event/EventData/Data[@Name='SettingType']"/>
+			<attrKeyMap attr="propValue" key="/Event/EventData/Data[@Name='SettingValue']"/>
+			<attrKeyMap attr="filePath" key="/Event/EventData/Data[@Name='ShareLocalPath']"/>
+			<attrKeyMap attr="fileName" key="/Event/EventData/Data[@Name='ShareName']"/>
+			<attrKeyMap attr="sidHistory" key="/Event/EventData/Data[@Name='SidHistory']"/>
+			<attrKeyMap attr="signatureName" key="/Event/EventData/Data[@Name='Signature']"/>
+			<attrKeyMap attr="signatureStatus" key="/Event/EventData/Data[@Name='SignatureStatus']"/>
+			<attrKeyMap attr="authResult" key="/Event/EventData/Data[@Name='Signed']"/>
+			<attrKeyMap attr="imageSigned" key="/Event/EventData/Data[@Name='Signed']"/>
+			<attrKeyMap attr="srcIpAddr" key="/Event/EventData/Data[@Name='SourceAddress']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='SourceHandleId']"/>
+			<attrKeyMap attr="srcName" key="/Event/EventData/Data[@Name='SourceHostname']"/>
+			<attrKeyMap attr="procName" key="/Event/EventData/Data[@Name='SourceImage']"/>
+			<attrKeyMap attr="srcIpAddr" key="/Event/EventData/Data[@Name='SourceIp']"/>
+			<attrKeyMap attr="_v6" key="/Event/EventData/Data[@Name='SourceIsIpv6']"/>
+			<attrKeyMap attr="srcIpPort" key="/Event/EventData/Data[@Name='SourcePort']"/>
+			<attrKeyMap attr="srcProcGUID" key="/Event/EventData/Data[@Name='SourceProcessGuid']"/>
+			<attrKeyMap attr="procId" key="/Event/EventData/Data[@Name='SourceProcessId']"/>
+			<attrKeyMap attr="srcThreadId" key="/Event/EventData/Data[@Name='SourceThreadId']"/>
+			<attrKeyMap attr="startAddress" key="/Event/EventData/Data[@Name='StartAddress']"/>
+			<attrKeyMap attr="funName" key="/Event/EventData/Data[@Name='StartFunction']"/>
+			<attrKeyMap attr="startFunction" key="/Event/EventData/Data[@Name='StartFunction']"/>
+			<attrKeyMap attr="module" key="/Event/EventData/Data[@Name='StartModule']"/>
+			<attrKeyMap attr="startModule" key="/Event/EventData/Data[@Name='StartModule']"/>
+			<attrKeyMap attr="serviceStartType" key="/Event/EventData/Data[@Name='StartType']"/>
+			<attrKeyMap attr="monitorState" key="/Event/EventData/Data[@Name='State']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='State']"/>
+			<attrKeyMap attr="errorCode" key="/Event/EventData/Data[@Name='Status']"/>
+			<!-- used in 4719 audit policy subcategory specific guid -->
+			<attrKeyMap attr="_subCatGuid" key="/Event/EventData/Data[@Name='SubcategoryGuid']"/>
+			<attrKeyMap attr="appSubcategory" key="/Event/EventData/Data[@Name='SubcategoryId']"/>
+			<attrKeyMap attr="_subjectDomainName" key="/Event/EventData/Data[@Name='SubjectDomainName']"/>
+			<attrKeyMap attr="winLogonId" key="/Event/EventData/Data[@Name='SubjectLogonId']"/>
+			<attrKeyMap attr="_subjectUserName" key="/Event/EventData/Data[@Name='SubjectUserName']"/>
+			<attrKeyMap attr="subjectUsername" key="/Event/EventData/Data[@Name='SubjectUserName']"/>
+			<attrKeyMap attr="securityId" key="/Event/EventData/Data[@Name='SubjectUserSid']"/>
+			<attrKeyMap attr="subStatus" key="/Event/EventData/Data[@Name='SubStatus']"/>
+			<attrKeyMap attr="targetDomain" key="/Event/EventData/Data[@Name='TargetDomainName']"/>
+			<attrKeyMap attr="targetUserDN" key="/Event/EventData/Data[@Name='MemberName']"/>
+			<attrKeyMap attr="fileName" key="/Event/EventData/Data[@Name='TargetFilename']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='TargetHandleId']"/>
+			<attrKeyMap attr="targetProcName" key="/Event/EventData/Data[@Name='TargetImage']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='TargetInfo']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='TargetLinkedLogonId']"/>
+			<attrKeyMap attr="winLogonGUID" key="/Event/EventData/Data[@Name='TargetLogonGuid']"/>
+			<attrKeyMap attr="winLogonId" key="/Event/EventData/Data[@Name='TargetLogonId']"/>
+			<attrKeyMap attr="regKeyPath" key="/Event/EventData/Data[@Name='TargetObject']"/>
+			<attrKeyMap attr="destDomain" key="/Event/EventData/Data[@Name='TargetOutboundDomainName']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='TargetOutboundUserName']"/>
+			<attrKeyMap attr="targetProcGUID" key="/Event/EventData/Data[@Name='TargetProcessGuid']"/>
+			<attrKeyMap attr="targetProcId" key="/Event/EventData/Data[@Name='TargetProcessId']"/>
+			<attrKeyMap attr="procName" key="/Event/EventData/Data[@Name='TargetProcessName']"/>
+			<attrKeyMap attr="targetName" key="/Event/EventData/Data[@Name='TargetServerName']"/>
+			<attrKeyMap attr="_targetSid" key="/Event/EventData/Data[@Name='TargetSid']"/>
+			<!-- FIX-5: Removed duplicate _targetDomainName mapping for TargetDomainName.
+		 targetDomain is already extracted at line 387. This second mapping to a temp var
+		 caused last-match-wins to steal the value, leaving targetDomain empty. -->
+			<attrKeyMap attr="_targetUserDomain" key="/Event/EventData/Data[@Name='TargetUserDomain']"/>
+			<attrKeyMap attr="_targetUserName" key="/Event/EventData/Data[@Name='TargetUserName']"/>
+			<attrKeyMap attr="securityId" key="/Event/EventData/Data[@Name='TargetUserSid']"/>
+			<attrKeyMap attr="taskContent" key="/Event/EventData/Data[@Name='TaskContent']"/>
+			<attrKeyMap attr="taskContentNew" key="/Event/EventData/Data[@Name='TaskContentNew']"/>
+			<attrKeyMap attr="taskName" key="/Event/EventData/Data[@Name='TaskName']"/>
+			<attrKeyMap attr="sessionId" key="/Event/EventData/Data[@Name='TerminalSessionId']"/>
+			<attrKeyMap attr="_testSigning" key="/Event/EventData/Data[@Name='TestSigning']"/>
+			<attrKeyMap attr="encryptAlgo" key="/Event/EventData/Data[@Name='TicketEncryptionType']"/>
+			<attrKeyMap attr="kerbTicketOption" key="/Event/EventData/Data[@Name='TicketOptions']"/>
+			<attrKeyMap attr="tokenType" key="/Event/EventData/Data[@Name='TokenElevationType']"/>
+			<attrKeyMap attr="transactionId" key="/Event/EventData/Data[@Name='TransactionId']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='TransactionIdf']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='TransmittedServices']"/>
+			<attrKeyMap attr="user" key="/Event/EventData/Data[@Name='User']"/>
+			<attrKeyMap attr="userAcctControl" key="/Event/EventData/Data[@Name='UserAccountControl']"/>
+			<attrKeyMap attr="_userClaims" key="/Event/EventData/Data[@Name='UserClaims']"/>
+			<attrKeyMap attr="paraName" key="/Event/EventData/Data[@Name='UserParameters']"/>
+			<attrKeyMap attr="userPrincipalName" key="/Event/EventData/Data[@Name='UserPrincipalName']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='UserWorkstations']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='VendorIds']"/>
+			<attrKeyMap attr="version" key="/Event/EventData/Data[@Name='Version']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='VirtualAccount']"/>
+			<attrKeyMap attr="" key="/Event/EventData/Data[@Name='VsmLaunchType']"/>
+			<attrKeyMap attr="srcName" key="/Event/EventData/Data[@Name='Workstation']"/>
+			<attrKeyMap attr="srcName" key="/Event/EventData/Data[@Name='WorkstationName']"/>
+			<!-- 4738 attribute changed event -->
+			<attrKeyMap attr="allowedToDelegateTo" key="/Event/EventData/Data[@Name='AllowedToDelegateTo']"/>
+			<!-- 5058 attribute -->
+			<attrKeyMap attr="keyType" key="/Event/EventData/Data[@Name='KeyType']"/>
+			<!-- OpenSSH Events have process and payload (msg body) -->
+			<attrKeyMap attr="procName" key="/Event/EventData/Data[@Name='process']"/>
+			<attrKeyMap attr="_payload" key="/Event/EventData/Data[@Name='payload']"/>
+			<!-- Microsoft-Windows-TaskScheduler/Operational events -->
+			<attrKeyMap attr="user" key="/Event/EventData/Data[@Name='UserContext']"/>
+			<attrKeyMap attr="procPath" key="/Event/EventData/Data[@Name='Path']"/>
+			<attrKeyMap attr="threadPriority" key="/Event/EventData/Data[@Name='Priority']"/>
+			<attrKeyMap attr="user" key="/Event/EventData/Data[@Name='UserName']"/>
+			<attrKeyMap attr="procPath" key="/Event/EventData/Data[@Name='ActionName']"/>
+			<attrKeyMap attr="instanceType" key="/Event/EventData/Data[@Name='TaskInstanceId']"/>
+			<attrKeyMap attr="procId" key="/Event/EventData/Data[@Name='EnginePID']"/>
+			<attrKeyMap attr="_resultCode" key="/Event/EventData/Data[@Name='ResultCode']"/>
+			<!-- Extended ticket tracking attributes for Kerberos events 4768, 4769, 4770 -->
+			<attrKeyMap attr="responseTicket" key="/Event/EventData/Data[@Name='ResponseTicket']"/>
+			<attrKeyMap attr="responseTicket" key="/Event/EventData/Data[@Name='ResponseTicketHash']"/>
+			<attrKeyMap attr="requestTicket" key="/Event/EventData/Data[@Name='RequestTicketHash']"/>
+			<!-- 6425 event additional attributes -->
+			<attrKeyMap attr="srcIpAddr" key="/Event/EventData/Data[@Name='ClientNetworkAddress']"/>
+			<attrKeyMap attr="authenMethod" key="/Event/EventData/Data[@Name='LegacyRPCMethodName']"/>
+			<attrKeyMap attr="targetDomain" key="/Event/EventData/Data[@Name='TrustedDomainName']"/>
+			<!-- 4886 event -->
+			<attrKeyMap attr="user" key="/Event/EventData/Data[@Name='Requester']"/>
+			<attrKeyMap attr="_attributes" key="/Event/EventData/Data[@Name='Attributes']"/>
+			<!-- 4887, 4888, 4889 events -->
+			<attrKeyMap attr="_disposition" key="/Event/EventData/Data[@Name='Disposition']"/>
+			<!-- Certificate Subject -->
+			<attrKeyMap attr="_certSubject" key="/Event/EventData/Data[@Name='Subject']"/>
+			<attrKeyMap attr="newValue" key="/Event/EventData/Data[@Name='CrashOnAuditFailValue']"/>
+		</collectFieldsByXPath>
+	</when>
+	<choose>
+		<when test="matches($_sysKeywords, '^0x801')">
+			<setEventAttribute attr="type">Audit Failure</setEventAttribute>
+			<setEventAttribute attr="status">Audit Failure</setEventAttribute>
+		</when>
+		<when test="matches($_sysKeywords, '^0x802')">
+			<setEventAttribute attr="type">Audit Success</setEventAttribute>
+			<setEventAttribute attr="status">Audit Success</setEventAttribute>
+		</when>
+		<when test="exist _type">
+			<setEventAttribute attr="type">$_type</setEventAttribute>
+			<setEventAttribute attr="status">$_type</setEventAttribute>
+		</when>
+		<when test="exist type">
+			<setEventAttribute attr="status">$type</setEventAttribute>
+		</when>
+	</choose>
+	<when test="exist _msg">
+		<setEventAttribute attr="msg">replaceStringByRegex($_msg, "\s*\n.*", "")</setEventAttribute>
+	</when>
+	<when test="exist _eventTime">
+		<switch>
+			<case>
+				<!-- 2023-11-29T16:58:50.035710300Z -->
+				<collectFieldsByRegex src="$_eventTime">
+					<regex><![CDATA[^<_year:gPatYear>-<_mon:gPatMonNum>-<_day:gPatDay>T<_time:gPatTime>\.\d+<_tz:gPatTimeZone>]]></regex>
+				</collectFieldsByRegex>
+			</case>
+			<case>
+				<!-- Dec 19 2018 06:28:10 -->
+				<!-- this is UTC time -->
+				<collectFieldsByRegex src="$_eventTime">
+					<regex><![CDATA[^<_etmon:gPatMon>\s+<_etday:gPatDay>\s+<_etyear:gPatYear>\s+<_ettime:gPatTime>]]></regex>
+				</collectFieldsByRegex>
+				<setEventAttribute attr="_tz">UTC</setEventAttribute>
+			</case>
+		</switch>
+		<setEventAttribute attr="eventTime">toDateTime($_mon, $_day, $_year, $_time, $_tz)</setEventAttribute>
+		<setEventAttribute attr="_latency">calculateLatency($deviceTime, $eventTime)</setEventAttribute>
+		<setEventAttribute attr="latency">scale($_latency, 1000)</setEventAttribute>
+	</when>
+	<when test="not_exist serviceName">
+		<when test="exist serviceFileName">
+			<setEventAttribute attr="serviceName">$serviceFileName</setEventAttribute>
+		</when>
+	</when>
+	<when test="exist eventSource">
+		<setEventAttribute attr="_sourceName">replaceStringByRegex($eventSource, "\s+", "-")</setEventAttribute>
+		<setEventAttribute attr="_sourceName">replaceStringByRegex($_sourceName, "[()]", "")</setEventAttribute>
+	</when>
+	<when test="exist classifier">
+		<when test="not_exist osObjType">
+			<setEventAttribute attr="osObjType">$classifier</setEventAttribute>
+		</when>
+	</when>
+	<when test="exist userDN">
+		<when test="not_exist osObjName">
+			<setEventAttribute attr="osObjName">$userDN</setEventAttribute>
+		</when>
+	</when>
+	<when test="exist osObjAction">
+		<when test="not_exist opName">
+			<setEventAttribute attr="opName">$osObjAction</setEventAttribute>
+		</when>
+	</when>
+	<when test="exist privName">
+		<setEventAttribute attr="userPerm">$privName</setEventAttribute>
+	</when>
+	<choose>
+		<!-- handle TargetUserName -->
+		<when test="not_exist winEventId"/>
+		<when test="$winEventId = '4740'">
+			<when test="exist _subjectDomainName">
+				<setEventAttribute attr="domain">$_subjectDomainName</setEventAttribute>
+			</when>
+			<!-- subject is the calling user, and target is the user the process is run as for 4688 -->
+			<when test="exist _subjectUserName">
+				<setEventAttribute attr="winLogonCallerUser">$_subjectUserName</setEventAttribute>
+			</when>
+			<when test="exist _targetUserName">
+				<setEventAttribute attr="user">$_targetUserName</setEventAttribute>
+			</when>
+		</when>
+		<!-- FIX-1: Removed 'exist _targetDomainName' branch that was here.
+	 It short-circuited this entire choose block for any event with TargetDomainName,
+	 preventing 4768/4624/4625/4648/4719/6425 from populating user/domain/clientIpAddr.
+	 targetDomain is already set by XPath extraction at line 384. -->
+		<when test="$winEventId IN '4624, 4625, 4688'">
+			<!-- FIX-2a: Was 'winKerbFailCode' which is never defined. Stock uses 'status' (hex error code).
+		 ALI renamed Data[@Name='Status'] to errorCode, so reference that. -->
+			<when test="exist errorCode">
+				<setEventAttribute attr="winLogonFailCode2">$errorCode</setEventAttribute>
+			</when>
+			<!-- subject is the calling user, and target is the user the process is run as for 4688 -->
+			<when test="exist _subjectUserName">
+				<setEventAttribute attr="winLogonCallerUser">$_subjectUserName</setEventAttribute>
+			</when>
+			<when test="exist _targetUserName">
+				<setEventAttribute attr="user">$_targetUserName</setEventAttribute>
+			</when>
+			<when test="exist _ipAddr">
+				<setEventAttribute attr="srcIpAddr">$_ipAddr</setEventAttribute>
+			</when>
+			<when test="exist _ipPort">
+				<setEventAttribute attr="srcIpPort">$_ipPort</setEventAttribute>
+			</when>
+			<choose>
+				<when test="exist _targetUserDomain">
+					<setEventAttribute attr="domain">$_targetUserDomain</setEventAttribute>
+				</when>
+				<when test="exist targetDomain">
+					<setEventAttribute attr="domain">$targetDomain</setEventAttribute>
+				</when>
+				<when test="exist _ipAddr">
+					<setEventAttribute attr="srcIpAddr">$_ipAddr</setEventAttribute>
+				</when>
+				<when test="exist _ipPort">
+					<setEventAttribute attr="srcIpPort">$_ipPort</setEventAttribute>
+				</when>
+			</choose>
+		</when>
+		<when test="$winEventId IN '4634, 4647, 4768, 4769, 4770, 4771'">
+			<when test="exist _targetUserName">
+				<setEventAttribute attr="user">$_targetUserName</setEventAttribute>
+			</when>
+			<when test="exist _targetUserDomain">
+				<setEventAttribute attr="domain">$_targetUserDomain</setEventAttribute>
+			</when>
+			<!-- FIX-6a: 4768 has TargetDomainName (→ targetDomain), NOT TargetUserDomain.
+		 Fall back to targetDomain when _targetUserDomain is absent. -->
+			<when test="not_exist _targetUserDomain">
+				<when test="exist targetDomain">
+					<setEventAttribute attr="domain">$targetDomain</setEventAttribute>
+				</when>
+			</when>
+			<when test="exist _ipAddr">
+				<!-- FIX-6b: Strip ::ffff: IPv4-mapped prefix. Raw value is ::ffff:10.x.x.x
+			 which fails FortiSIEM IP type storage. Also set srcIpAddr for rule compatibility. -->
+				<setEventAttribute attr="_ipAddr">replaceStringByRegex($_ipAddr, "^::ffff:", "")</setEventAttribute>
+				<setEventAttribute attr="clientIpAddr">$_ipAddr</setEventAttribute>
+				<setEventAttribute attr="srcIpAddr">$_ipAddr</setEventAttribute>
+			</when>
+			<when test="exist _ipPort">
+				<setEventAttribute attr="srcIpPort">$_ipPort</setEventAttribute>
+			</when>
+		</when>
+		<when test="$winEventId = '4648'">
+			<when test="exist _subjectDomainName">
+				<setEventAttribute attr="srcName">$_subjectDomainName</setEventAttribute>
+			</when>
+			<when test="exist _ipAddr">
+				<setEventAttribute attr="destIpAddr">$_ipAddr</setEventAttribute>
+			</when>
+			<when test="exist _ipPort">
+				<setEventAttribute attr="destIpPort">$_ipPort</setEventAttribute>
+			</when>
+			<when test="exist _targetUserName">
+				<setEventAttribute attr="targetUser">$_targetUserName</setEventAttribute>
+			</when>
+		</when>
+		<when test="$winEventId IN '4727, 4728, 4729, 4730, 4731, 4732, 4733, 4734, 4735, 4737, 4744, 4745, 4746, 4747, 4748, 4749, 4750, 4751, 4752, 4753, 4754, 4755, 4756, 4757, 4758, 4759, 4760, 4761, 4762, 4763, 4785, 4786, 4787, 4788, 4789, 4799'">
+			<when test="exist _targetUserName">
+				<setEventAttribute attr="targetUserGrp">$_targetUserName</setEventAttribute>
+			</when>
+			<when test="exist targetUserDN">
+				<switch>
+					<case>
+						<collectFieldsByRegex src="$targetUserDN">
+							<regex><![CDATA[[cC][nN]\s*=\s*<targetUser:patLdapCN>]]></regex>
+						</collectFieldsByRegex>
+						<when test="exist targetUser">
+							<setEventAttribute attr="targetUser">replaceStringByRegex($targetUser, "\\,", ",")</setEventAttribute>
+						</when>
+					</case>
+					<default/>
+				</switch>
+			</when>
+			<when test="not_exist targetUser">
+				<when test="exist MemberSid">
+					<setEventAttribute attr="targetUser">$MemberSid</setEventAttribute>
+				</when>
+			</when>
+		</when>
+		<when test="$winEventId = '4719'">
+			<!-- System audit policy was changed -->
+			<when test="exist _subjectDomainName">
+				<setEventAttribute attr="domain">$_subjectDomainName</setEventAttribute>
+			</when>
+			<when test="exist _subjectUserName">
+				<setEventAttribute attr="user">$_subjectUserName</setEventAttribute>
+			</when>
+			<when test="exist _subCatGuid">
+				<setEventAttribute attr="oid">$_subCatGuid</setEventAttribute>
+			</when>
+		</when>
+		<when test="$winEventId IN '4886,4887,4888,4889'">
+			<when test="exist _attributes">
+				<setEventAttribute attr="details">$_attributes</setEventAttribute>
+			</when>
+			<choose>
+				<when test="not_exist _disposition"/>
+				<when test="$_disposition = '0'">
+					<setEventAttribute attr="action">request did not complete</setEventAttribute>
+				</when>
+				<when test="$_disposition = '1'">
+					<setEventAttribute attr="action">failed</setEventAttribute>
+				</when>
+				<when test="$_disposition = '2'">
+					<setEventAttribute attr="action">denied</setEventAttribute>
+				</when>
+				<when test="$_disposition = '3'">
+					<setEventAttribute attr="action">issued</setEventAttribute>
+				</when>
+				<when test="$_disposition = '4'">
+					<setEventAttribute attr="action">issued separately</setEventAttribute>
+				</when>
+				<when test="$_disposition = '5'">
+					<setEventAttribute attr="action">taken under submission</setEventAttribute>
+				</when>
+				<when test="$_disposition = '6'">
+					<setEventAttribute attr="action">revoked</setEventAttribute>
+				</when>
+				<otherwise>
+					<setEventAttribute attr="action">$_disposition</setEventAttribute>
+				</otherwise>
+			</choose>
+			<when test="exist _certSubject">
+				<setEventAttribute attr="tlsServerSubject">$_certSubject</setEventAttribute>
+			</when>
+		</when>
+		<when test="$winEventId = '6425'">
+			<!-- A network client used a legacy RPC method -->
+			<when test="exist _subjectDomainName">
+				<setEventAttribute attr="domain">$_subjectDomainName</setEventAttribute>
+			</when>
+			<when test="exist _subjectUserName">
+				<setEventAttribute attr="user">$_subjectUserName</setEventAttribute>
+			</when>
+		</when>
+		<when test="exist _targetUserName">
+			<setEventAttribute attr="_targetUser">$_targetUserName</setEventAttribute>
+			<when test="exist _targetUserDomain">
+				<setEventAttribute attr="targetDomain">$_targetUserDomain</setEventAttribute>
+			</when>
+		</when>
+	</choose>
+	<choose>
+		<when test="exist user"/>
+		<when test="exist _subjectUserName">
+			<setEventAttribute attr="user">$_subjectUserName</setEventAttribute>
+			<when test="exist _subjectDomainName">
+				<setEventAttribute attr="domain">$_subjectDomainName</setEventAttribute>
+			</when>
+		</when>
+		<when test="exist _accountName">
+			<setEventAttribute attr="user">$_accountName</setEventAttribute>
+			<when test="exist _accountDomain">
+				<setEventAttribute attr="domain">$_accountDomain</setEventAttribute>
+			</when>
+		</when>
+		<when test="exist _clientUserName">
+			<setEventAttribute attr="user">$_clientUserName</setEventAttribute>
+		</when>
+		<when test="exist _memberName">
+			<setEventAttribute attr="user">$_memberName</setEventAttribute>
+		</when>
+		<when test="exist _user">
+			<setEventAttribute attr="user">$_user</setEventAttribute>
+		</when>
+	</choose>
+	<choose>
+		<when test="not_exist activityType"/>
+		<when test="matches($activityType, '^[a-z]')">
+			<!-- if starts with lower case, change the first letter to upper case -->
+			<setEventAttribute attr="_first">replaceStringByRegex($activityType, "(?&lt;=.).*", "")</setEventAttribute>
+			<setEventAttribute attr="_first">toUpper($_first)</setEventAttribute>
+			<setEventAttribute attr="_rest">replaceStringByRegex($activityType, "^.", "")</setEventAttribute>
+			<setEventAttribute attr="activityType">combineMsgId($_first, $_rest)</setEventAttribute>
+		</when>
+	</choose>
+	<choose>
+		<when test="not_exist activityType"/>
+		<when test="$activityType = 'AD FS/Admin'">
+			<setEventAttribute attr="_et">AD-FS</setEventAttribute>
+		</when>
+		<when test="$activityType = 'Application'">
+			<choose>
+				<when test="not_exist _sourceName">
+					<setEventAttribute attr="_et">App</setEventAttribute>
+				</when>
+				<when test="matches($_sourceName, '^MSSQL\$')">
+					<setEventAttribute attr="_et">App-MSSQLSERVER</setEventAttribute>
+				</when>
+				<when test="matches($_sourceName, '^SQLAgent\$\w+$')">
+					<setEventAttribute attr="_et">App-SQLSERVERAGENT</setEventAttribute>
+				</when>
+				<when test="matches($eventSource, '^Report Server Windows Service \(MSSQLSERVER\)$')">
+					<setEventAttribute attr="_et">App-MSSQL-SSRS</setEventAttribute>
+				</when>
+				<otherwise>
+					<setEventAttribute attr="_et">combineMsgId("App-", $_sourceName)</setEventAttribute>
+				</otherwise>
+			</choose>
+		</when>
+		<when test="$activityType IN 'CodeIntegrity Operational, DNS Client, Firewall AS, MSExchange Management, Security Mitigation, Shell-Core'">
+			<setEventAttribute attr="_et">replaceStringByRegex($activityType, "\s+", "-")</setEventAttribute>
+		</when>
+		<when test="$activityType = 'Directory Service'">
+			<setEventAttribute attr="_et">App-AD</setEventAttribute>
+		</when>
+		<when test="$activityType IN 'DFS Replication, DNS Server'">
+			<choose>
+				<when test="exist _sourceName">
+					<setEventAttribute attr="_et">combineMsgId("App-", $_sourceName)</setEventAttribute>
+				</when>
+				<otherwise>
+					<setEventAttribute attr="_et">App</setEventAttribute>
+				</otherwise>
+			</choose>
+		</when>
+		<when test="$activityType = 'Microsoft-IIS-Logging/Logs'">
+			<setEventAttribute attr="_et">IIS</setEventAttribute>
+		</when>
+		<when test="$activityType = 'Microsoft-Windows-AppXDeployment-Server'">
+			<setEventAttribute attr="_et">AppXDeployment</setEventAttribute>
+		</when>
+		<when test="$activityType = 'Microsoft-Windows-PrintService/Operational'">
+			<setEventAttribute attr="_et">PrintService</setEventAttribute>
+		</when>
+		<when test="$activityType = 'Microsoft-Windows-DNSServer/Analytical'">
+			<setEventAttribute attr="_et">DNS</setEventAttribute>
+			<collectFieldsByRegex src="$_msg">
+				<regex><![CDATA[^<type:gPatStrEndColon>:<_body:gPatMesgBody>]]></regex>
+			</collectFieldsByRegex>
+			<collectAndSetAttrByKeyValuePair sep=";" src="$_body">
+				<attrKeyMap attr="srcIpPort" key="TCP="/>
+				<attrKeyMap attr="dnsServer" key="InterfaceIP="/>
+				<attrKeyMap attr="srcIpAddr" key="Source="/>
+				<attrKeyMap attr="destName" key="QNAME="/>
+				<attrKeyMap attr="dnsQueryType" key="QTYPE="/>
+				<attrKeyMap attr="queryId" key="XID="/>
+				<attrKeyMap attr="srcIpPort" key="Port="/>
+				<attrKeyMap attr="destIpAddr" key="Destination="/>
+				<attrKeyMap attr="dnsSec" key="DNSSEC="/>
+				<attrKeyMap attr="dnsResponseCode" key="RCODE="/>
+				<attrKeyMap attr="reason" key="Reason="/>
+				<attrKeyMap attr="scope" key="Scope="/>
+				<attrKeyMap attr="scope" key="ServerScope="/>
+				<attrKeyMap attr="scope" key="ZoneScope="/>
+				<attrKeyMap attr="cacheScope" key="CacheScope="/>
+				<attrKeyMap attr="dnsZone" key="Zone="/>
+				<attrKeyMap attr="policyName" key="PolicyName="/>
+			</collectAndSetAttrByKeyValuePair>
+			<when test="not_exist srcIpAddr">
+				<when test="exist reptDevIpAddr">
+					<setEventAttribute attr="srcIpAddr">$reptDevIpAddr</setEventAttribute>
+				</when>
+			</when>
+			<when test="exist destName">
+				<setEventAttribute attr="destName">trimAttribute($destName, ".")</setEventAttribute>
+			</when>
+		</when>
+		<when test="$activityType = 'Microsoft-Windows-DNSServer/Audit'">
+			<setEventAttribute attr="_et">DNS</setEventAttribute>
+		</when>
+		<when test="$activityType IN 'Microsoft-Windows-PowerShell/Operational, Windows PowerShell, Microsoft-windows-powershell/operational'">
+			<setEventAttribute attr="_et">PowerShell</setEventAttribute>
+			<switch>
+				<case>
+					<collectFieldsByRegex src="$_msg">
+						<regex><![CDATA[^<msg:gPatMesgBodyMin>\s*[\r\n]+.*?:\s+<_body:gPatMesgBody>]]></regex>
+					</collectFieldsByRegex>
+					<setEventAttribute attr="_body">replaceStringByRegex($_body, "\t", "")</setEventAttribute>
+					<collectFieldsByKeyValuePair kvsep="=" sep="\n" src="$_body">
+						<attrKeyMap attr="command" key="CommandLine"/>
+						<attrKeyMap attr="commandName" key="CommandName"/>
+						<attrKeyMap attr="commandPath" key="CommandPath"/>
+						<attrKeyMap attr="commandType" key="CommandType"/>
+						<attrKeyMap attr="detailSeq" key="DetailSequence"/>
+						<attrKeyMap attr="detailTotal" key="DetailTotal"/>
+						<attrKeyMap attr="engineVersion" key="EngineVersion"/>
+						<attrKeyMap attr="appName" key="HostApplication"/>
+						<attrKeyMap attr="hostId" key="HostId"/>
+						<attrKeyMap attr="hostName" key="HostName"/>
+						<attrKeyMap attr="version" key="HostVersion"/>
+						<attrKeyMap attr="engineState" key="NewEngineState"/>
+						<attrKeyMap attr="newProviderState" key="NewProviderState"/>
+						<attrKeyMap attr="pipelineId" key="PipelineId"/>
+						<attrKeyMap attr="prevEngineState" key="PreviousEngineState"/>
+						<attrKeyMap attr="providerName" key="ProviderName"/>
+						<attrKeyMap attr="runSpaceId" key="RunspaceId"/>
+						<attrKeyMap attr="script" key="ScriptName"/>
+						<attrKeyMap attr="seqNum" key="SequenceNumber"/>
+						<attrKeyMap attr="user" key="UserId"/>
+					</collectFieldsByKeyValuePair>
+				</case>
+				<default/>
+			</switch>
+		</when>
+		<when test="$activityType = 'Microsoft-Windows-Sysmon/Operational'">
+			<setEventAttribute attr="_et">Sysmon</setEventAttribute>
+			<choose>
+				<when test="exist _task">
+					<setEventAttribute attr="msg">replaceStringByRegex($_task, "\s*\(.*", "")</setEventAttribute>
+				</when>
+				<when test="exist msg">
+					<setEventAttribute attr="msg">trimAttribute($msg, ":")</setEventAttribute>
+				</when>
+			</choose>
+			<when test="exist _hash">
+				<switch>
+					<case>
+						<collectFieldsByRegex src="$_hash">
+							<regex><![CDATA[^<hashAlgo:gPatWord>=<hashCode:gPatWord>]]></regex>
+						</collectFieldsByRegex>
+						<collectFieldsByKeyValuePair kvsep="=" sep="," src="$_hash">
+							<attrKeyMap attr="hashMD5" key="MD5"/>
+							<attrKeyMap attr="hashSHA256" key="SHA256"/>
+							<attrKeyMap attr="hashSHA1" key="SHA1"/>
+							<attrKeyMap attr="hashIMP" key="IMPHASH"/>
+						</collectFieldsByKeyValuePair>
+					</case>
+					<default/>
+				</switch>
+			</when>
+			<when test="exist ruleName">
+				<collectFieldsByKeyValuePair kvsep="=" sep="," src="$ruleName">
+					<attrKeyMap attr="attackTactic" key="Mitre_Tactic"/>
+					<attrKeyMap attr="attackTechnique" key="Mitre_Technique"/>
+					<attrKeyMap attr="attackTechniqueId" key="Mitre_Technique_Id"/>
+					<attrKeyMap attr="mitreURL" key="Mitre_URL"/>
+				</collectFieldsByKeyValuePair>
+				<setEventAttribute attr="mitrePlatform">Windows</setEventAttribute>
+			</when>
+			<when test="exist destIpAddrList">
+				<setEventAttribute attr="destIpAddr">replaceStringByRegex($destIpAddrList, ";.*", "")</setEventAttribute>
+			</when>
+		</when>
+		<when test="$activityType = 'Security'">
+			<setEventAttribute attr="_et">Security</setEventAttribute>
+			<choose>
+				<when test="not_exist _sourceName"/>
+				<when test="$_sourceName = 'LOGbndSC'">
+					<setEventAttribute attr="_et">Security-LOGbndSC</setEventAttribute>
+				</when>
+				<when test="$_sourceName = 'AD-FS-Auditing'">
+					<setEventAttribute attr="_et">AD-FS</setEventAttribute>
+				</when>
+			</choose>
+		</when>
+		<when test="$activityType = 'System'">
+			<choose>
+				<when test="not_exist _sourceName">
+					<setEventAttribute attr="_et">System</setEventAttribute>
+				</when>
+				<when test="$_sourceName = 'Microsoft-Windows-WindowsUpdateClient'">
+					<setEventAttribute attr="_et">System-UpdateClient</setEventAttribute>
+				</when>
+				<otherwise>
+					<setEventAttribute attr="_et">combineMsgId("System-", $_sourceName)</setEventAttribute>
+				</otherwise>
+			</choose>
+		</when>
+		<!-- <Channel>OpenSSH/Operational</Channel> -->
+		<when test="$activityType IN 'OpenSSH/Operational,OpenSSH/Admin'">
+			<!-- GitHub Repo OpenSSH Portable logit functions contain all possible mesage strings -->
+			<!-- Every OpenSSH event seems to only have process and payload fields, msg field is process: payload as well. -->
+			<setEventAttribute attr="_et">OpenSSH</setEventAttribute>
+			<!-- Parse message fields -->
+			<when test="exist _payload">
+				<setEventAttribute attr="msg">$_payload</setEventAttribute>
+				<switch>
+					<case>
+						<!-- Server listening on :: port 2222. -->
+						<!-- rdomain is routing domain if vrf aware -->
+						<collectFieldsByRegex src="$msg">
+							<regex><![CDATA[Server listening on <_ip:gPatIpAddr> port <ipPort:gPatInt>(?:\s+rdomain\s+<virtContext:gPatStr>)?\.]]></regex>
+						</collectFieldsByRegex>
+						<choose>
+							<when test="$_ip = '0.0.0.0'"/>
+							<when test="$_ip = '::'"/>
+							<otherwise>
+								<setEventAttribute attr="serverIpAddr">$_ip</setEventAttribute>
+							</otherwise>
+						</choose>
+					</case>
+					<default/>
+				</switch>
+			</when>
+		</when>
+		<when test="$activityType = 'Microsoft-IIS-Configuration/Operational'">
+			<setEventAttribute attr="_et">IIS-Configuration</setEventAttribute>
+		</when>
+		<when test="$activityType = 'Microsoft-Windows-SmartCard-Audit'">
+			<setEventAttribute attr="_et">System-SmartCard-Audit</setEventAttribute>
+		</when>
+		<when test="$activityType = 'Microsoft-Windows-CertificateServicesClient-Lifecycle-System/Operational'">
+			<setEventAttribute attr="_et">System-CertServicesClient-Lifecycle-System</setEventAttribute>
+		</when>
+	</choose>
+	<choose>
+		<when test="exist _et"/>
+		<when test="not_exist _sourceName"/>
+		<when test="matches($_sourceName, '^Microsoft-Windows-')">
+			<setEventAttribute attr="_et">replaceStringByRegex($_sourceName, "^Microsoft-Windows-", "")</setEventAttribute>
+			<choose>
+				<when test="$_et = 'TerminalServices-Gateway'">
+					<setEventAttribute attr="_msg">replaceStrInStr($_msg, "\\", "")</setEventAttribute>
+					<choose>
+						<when test="$winEventId = '200'">
+							<switch>
+								<case>
+									<collectFieldsByRegex src="$_msg">
+										<regex><![CDATA[The\suser\s"<user:gPatMesgBodyMin>",\s+on\s+client\s+computer\s"<srcIpAddr:gPatIpAddr>",.*method used was:\s+"<authenMethod:gPatStr>"\s+and\s+connection\s+protocol\s+used:\s+"<appTransportProto:gPatWord>"]]></regex>
+									</collectFieldsByRegex>
+								</case>
+								<default/>
+							</switch>
+						</when>
+						<when test="$winEventId = '205'">
+							<switch>
+								<case>
+									<collectFieldsByRegex src="$_msg">
+										<regex><![CDATA[The\suser\s"<user:gPatMesgBodyMin>",\s+on\s+client\s+computer\s"<srcIpAddr:gPatIpAddr>",.*remote server\s+"<destName:gPatHostName>".*method\s+used\s+was:\s+"<authenMethod:gPatWord>"]]></regex>
+									</collectFieldsByRegex>
+								</case>
+								<default/>
+							</switch>
+						</when>
+						<when test="$winEventId = '300'">
+							<switch>
+								<case>
+									<collectFieldsByRegex src="$_msg">
+										<regex><![CDATA[The\suser\s"<user:gPatMesgBodyMin>",\s+on\s+client\s+computer\s"<srcIpAddr:gPatIpAddr>",.*connect\s+to\s+resource\s+"<resourceName:gPatStr>"\.]]></regex>
+									</collectFieldsByRegex>
+								</case>
+								<default/>
+							</switch>
+						</when>
+						<when test="$winEventId = '302'">
+							<switch>
+								<case>
+									<collectFieldsByRegex src="$_msg">
+										<regex><![CDATA[The\suser\s"<user:gPatMesgBodyMin>",\s+on\s+client\s+computer\s"<srcIpAddr:gPatIpAddr>",\s+connected\s+to\s+resource\s+"<resourceName:gPatStr>"\.\s+Connection\s+protocol\s+used:\s+"<appTransportProto:gPatWord>"\.]]></regex>
+									</collectFieldsByRegex>
+								</case>
+								<default/>
+							</switch>
+						</when>
+						<when test="$winEventId = '303'">
+							<switch>
+								<case>
+									<collectFieldsByRegex src="$_msg">
+										<regex><![CDATA[The\suser\s"<user:gPatMesgBodyMin>",\s+on\s+client\s+computer\s"<srcIpAddr:gPatIpAddr>",\s+disconnected\s+from\s+the\s+following\s+network\s+resource:\s+"<resourceName:gPatStr>"\..*transferred\s+<sentBytes:gPatInt>\s+bytes\s+and\s+received\s+<recvBytes:gPatInt>\s+bytes\.\s+The\s+client\s+session\s+duration\s+was\s+<_durationSec:gPatInt>\s+seconds\.\s+Connection\s+protocol\s+used:\s+"<appTransportProto:gPatWord>"\.]]></regex>
+									</collectFieldsByRegex>
+									<setEventAttribute attr="durationMSec">scale($_durationSec, 1000)</setEventAttribute>
+								</case>
+								<default/>
+							</switch>
+						</when>
+						<when test="$winEventId = '312'">
+							<switch>
+								<case>
+									<collectFieldsByRegex src="$_msg">
+										<regex><![CDATA[The\suser\s"<user:gPatMesgBodyMin>",\s+on\s+client\s+computer\s"<srcIpAddr:gPatIpAddr>(?:\:<srcIpPort:gPatInt>)?",]]></regex>
+									</collectFieldsByRegex>
+								</case>
+								<default/>
+							</switch>
+						</when>
+					</choose>
+					<!-- bottom of parser does not set domain if already existing, so have to parse here -->
+					<when test="exist user">
+						<switch>
+							<case>
+								<collectFieldsByRegex src="$user">
+									<regex><![CDATA[<domain:gPatMesgBody>[\\]<user:gPatMesgBody>]]></regex>
+								</collectFieldsByRegex>
+							</case>
+							<default/>
+						</switch>
+					</when>
+				</when>
+				<when test="$_et = 'TerminalServices-LocalSessionManager'">
+					<setEventAttribute attr="_msg">replaceStrInStr($_msg, "\\", "")</setEventAttribute>
+					<choose>
+						<when test="$winEventId IN '21, 22, 23, 24, 25, 41, 42'">
+							<setEventAttribute attr="destName">$computer</setEventAttribute>
+						</when>
+						<when test="$winEventId = '40'">
+							<setEventAttribute attr="errorNo">$_reason</setEventAttribute>
+						</when>
+					</choose>
+				</when>
+				<when test="$_et = 'Windows-Firewall-With-Advanced-Security'">
+					<setEventAttribute attr="_et">Firewall-AS</setEventAttribute>
+					<setEventAttribute attr="_msg">replaceStringByRegex($_msg, "^[^\n]*\n\s*", "")</setEventAttribute>
+					<setEventAttribute attr="_msg">replaceStringByRegex($_msg, "\t+", "  ")</setEventAttribute>
+					<choose>
+						<when test="$winEventId = '2000'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="profileName" key="Current Profile"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2001'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="profileName" key="Profile"/>
+								<attrKeyMap attr="operationalState" key="Operational Mode"/>
+								<attrKeyMap attr="filePath" key="Log File path"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2002'">
+							<collectFieldsByRegex src="$_msg">
+								<regex><![CDATA[^<_detail:gPatMesgBodyMin>:\s+<_body:gPatMesgBody>]]></regex>
+							</collectFieldsByRegex>
+							<collectAndSetAttrByKeyValuePair sep="\n" src="$_body">
+								<attrKeyMap attr="type" key="Type: "/>
+								<attrKeyMap attr="configValue" key="Value: "/>
+								<attrKeyMap attr="srcUser" key="Modifying User: "/>
+								<attrKeyMap attr="srcApp" key="Modifying Application: "/>
+							</collectAndSetAttrByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2003'">
+							<collectFieldsByRegex src="$_msg">
+								<regex><![CDATA[^<_detail:gPatMesgBodyMin>:\s+<_body:gPatMesgBody>]]></regex>
+							</collectFieldsByRegex>
+							<collectAndSetAttrByKeyValuePair sep="\n" src="$_body">
+								<attrKeyMap attr="type" key="Type: "/>
+								<attrKeyMap attr="configValue" key="Value: "/>
+								<attrKeyMap attr="srcUser" key="Modifying User: "/>
+								<attrKeyMap attr="srcApp" key="Modifying Application: "/>
+							</collectAndSetAttrByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2004'">
+							<collectFieldsByRegex src="$_msg">
+								<regex><![CDATA[^<_detail:gPatMesgBodyMin>:\s+<_body:gPatMesgBody>]]></regex>
+							</collectFieldsByRegex>
+							<collectAndSetAttrByKeyValuePair sep="\n" src="$_body">
+								<attrKeyMap attr="ruleId" key="Rule ID: "/>
+								<attrKeyMap attr="ruleName" key="Rule Name: "/>
+								<attrKeyMap attr="origLocation" key="Origin: "/>
+								<attrKeyMap attr="activeStatus" key="Active: "/>
+								<attrKeyMap attr="direction" key="Direction: "/>
+								<attrKeyMap attr="profileNames" key="Profiles: "/>
+								<attrKeyMap attr="fwAction" key="Action: "/>
+								<attrKeyMap attr="procPath" key="Application Path: "/>
+								<attrKeyMap attr="serviceName" key="Service Name: "/>
+								<attrKeyMap attr="options" key="Security Options: "/>
+								<attrKeyMap attr="edgeTraversalSetting" key="Edge Traversal: "/>
+								<attrKeyMap attr="srcUser" key="Modifying User: "/>
+								<attrKeyMap attr="srcApp" key="Modifying Application: "/>
+							</collectAndSetAttrByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2005'">
+							<collectFieldsByRegex src="$_msg">
+								<regex><![CDATA[^<_detail:gPatMesgBodyMin>:\s+<_body:gPatMesgBody>]]></regex>
+							</collectFieldsByRegex>
+							<collectAndSetAttrByKeyValuePair sep="\n" src="$_body">
+								<attrKeyMap attr="ruleId" key="Rule ID: "/>
+								<attrKeyMap attr="ruleName" key="Rule Name: "/>
+								<attrKeyMap attr="origLocation" key="Origin: "/>
+								<attrKeyMap attr="activeStatus" key="Active: "/>
+								<attrKeyMap attr="direction" key="Direction: "/>
+								<attrKeyMap attr="profileNames" key="Profiles: "/>
+								<attrKeyMap attr="fwAction" key="Action: "/>
+								<attrKeyMap attr="procPath" key="Application Path: "/>
+								<attrKeyMap attr="serviceName" key="Service Name: "/>
+								<attrKeyMap attr="options" key="Security Options: "/>
+								<attrKeyMap attr="edgeTraversalSetting" key="Edge Traversal: "/>
+								<attrKeyMap attr="srcUser" key="Modifying User: "/>
+								<attrKeyMap attr="srcApp" key="Modifying Application: "/>
+							</collectAndSetAttrByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2006'">
+							<collectFieldsByRegex src="$_msg">
+								<regex><![CDATA[^<_detail:gPatMesgBodyMin>:\s+<_body:gPatMesgBody>]]></regex>
+							</collectFieldsByRegex>
+							<collectAndSetAttrByKeyValuePair sep="\n" src="$_body">
+								<attrKeyMap attr="ruleId" key="Rule ID: "/>
+								<attrKeyMap attr="ruleName" key="Rule Name: "/>
+								<attrKeyMap attr="srcUser" key="Modifying User: "/>
+								<attrKeyMap attr="srcApp" key="Modifying Application: "/>
+							</collectAndSetAttrByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2007'">
+							<collectFieldsByRegex src="$_msg">
+								<regex><![CDATA[^<_detail:gPatMesgBodyMin>:\s+<_body:gPatMesgBody>]]></regex>
+							</collectFieldsByRegex>
+							<collectAndSetAttrByKeyValuePair sep="\n" src="$_body">
+								<attrKeyMap attr="ruleId" key="Rule ID: "/>
+								<attrKeyMap attr="ruleName" key="Rule Name: "/>
+								<attrKeyMap attr="origLocation" key="Origin: "/>
+								<attrKeyMap attr="activeStatus" key="Active: "/>
+								<attrKeyMap attr="direction" key="Direction: "/>
+								<attrKeyMap attr="profileNames" key="Profiles: "/>
+								<attrKeyMap attr="fwAction" key="Action: "/>
+								<attrKeyMap attr="procPath" key="Application Path: "/>
+								<attrKeyMap attr="serviceName" key="Service Name: "/>
+								<attrKeyMap attr="options" key="Security Options: "/>
+								<attrKeyMap attr="edgeTraversalSetting" key="Edge Traversal: "/>
+							</collectAndSetAttrByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2009'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="errorString" key="Error"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2010'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="destIntfAlias" key="Adapter Name"/>
+								<attrKeyMap attr="oldSettingsValue" key="Old Profile"/>
+								<attrKeyMap attr="newSettingsValue" key="New Profile"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2011'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="procPath" key="Application Path"/>
+								<attrKeyMap attr="_IP_Version" key="IP Version"/>
+								<attrKeyMap attr="destIpPort" key="Port"/>
+								<attrKeyMap attr="procId" key="Process Id"/>
+								<attrKeyMap attr="reason" key="Reason"/>
+								<attrKeyMap attr="user" key="User"/>
+							</collectFieldsByKeyValuePair>
+							<choose>
+								<when test="$_IP_Version = 'IPv4'">
+									<setEventAttribute attr="ipVersion">4</setEventAttribute>
+								</when>
+								<when test="$_IP_Version = 'IPv6'">
+									<setEventAttribute attr="ipVersion">6</setEventAttribute>
+								</when>
+							</choose>
+						</when>
+						<when test="$winEventId = '2012'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="ruleId" key="Rule ID"/>
+								<attrKeyMap attr="ruleName" key="Rule Name"/>
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="activeStatus" key="Active"/>
+								<attrKeyMap attr="fwAction" key="Action"/>
+								<attrKeyMap attr="profileNames" key="Profiles"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2013'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="ruleId" key="Rule ID"/>
+								<attrKeyMap attr="ruleName" key="Rule Name"/>
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="activeStatus" key="Active"/>
+								<attrKeyMap attr="fwAction" key="Action"/>
+								<attrKeyMap attr="profileNames" key="Profiles"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2014'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="ruleId" key="Rule ID"/>
+								<attrKeyMap attr="ruleName" key="Rule Name"/>
+								<attrKeyMap attr="srcUser" key="Modifying User"/>
+								<attrKeyMap attr="srcApp" key="Modifying Application"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2015'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="ruleId" key="Rule ID"/>
+								<attrKeyMap attr="ruleName" key="Rule Name"/>
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="activeStatus" key="Active"/>
+								<attrKeyMap attr="fwAction" key="Action"/>
+								<attrKeyMap attr="profileNames" key="Profiles"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2016'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="ruleId" key="Rule ID"/>
+								<attrKeyMap attr="ruleName" key="Rule Name"/>
+								<attrKeyMap attr="profileNames" key="Profiles"/>
+								<attrKeyMap attr="activeStatus" key="Active"/>
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2017'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="ruleId" key="Rule ID"/>
+								<attrKeyMap attr="ruleName" key="Rule Name"/>
+								<attrKeyMap attr="profileNames" key="Profiles"/>
+								<attrKeyMap attr="activeStatus" key="Active"/>
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2018'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="ruleId" key="Rule ID"/>
+								<attrKeyMap attr="ruleName" key="Rule Name"/>
+								<attrKeyMap attr="srcUser" key="Modifying User"/>
+								<attrKeyMap attr="srcApp" key="Modifying Application"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2019'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="ruleId" key="Rule ID"/>
+								<attrKeyMap attr="ruleName" key="Rule Name"/>
+								<attrKeyMap attr="profileNames" key="Profiles"/>
+								<attrKeyMap attr="activeStatus" key="Active"/>
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2020'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2021'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2022'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="ruleId" key="Rule ID"/>
+								<attrKeyMap attr="ruleName" key="Rule Name"/>
+								<attrKeyMap attr="srcUser" key="Modifying User"/>
+								<attrKeyMap attr="srcApp" key="Modifying Application"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2023'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2024'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2025'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2026'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="ruleId" key="Rule ID"/>
+								<attrKeyMap attr="ruleName" key="Rule Name"/>
+								<attrKeyMap attr="srcUser" key="Modifying User"/>
+								<attrKeyMap attr="srcApp" key="Modifying Application"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2027'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2028'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2029'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2030'">
+							<collectFieldsByRegex src="$_msg">
+								<regex><![CDATA[^<_detail:gPatMesgBodyMin>:\s+<_body:gPatMesgBody>]]></regex>
+							</collectFieldsByRegex>
+							<collectAndSetAttrByKeyValuePair sep="\n" src="$_body">
+								<attrKeyMap attr="ruleId" key="Rule ID: "/>
+								<attrKeyMap attr="ruleName" key="Rule Name: "/>
+								<attrKeyMap attr="srcUser" key="Modifying User: "/>
+								<attrKeyMap attr="srcApp" key="Modifying Application: "/>
+							</collectAndSetAttrByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2031'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="origLocation" key="Origin"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2032'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2033'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="datastoreType" key="Store Type"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2034'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="datastoreType" key="Store Type"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2035'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="datastoreType" key="Store Type"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2036'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="datastoreType" key="Store Type"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2037'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="datastoreType" key="Store Type"/>
+								<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+								<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2038'">
+							<collectFieldsByRegex src="$_msg">
+								<regex><![CDATA[^<_detail:gPatMesgBodyMin>:\s+<_body:gPatMesgBody>]]></regex>
+							</collectFieldsByRegex>
+							<collectAndSetAttrByKeyValuePair sep="\n" src="$_body">
+								<attrKeyMap attr="ruleId" key="ID: "/>
+								<attrKeyMap attr="ruleName" key="Name: "/>
+								<attrKeyMap attr="reason" key="Reason: "/>
+							</collectAndSetAttrByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2039'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="reason" key="Reason"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2040'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="reason" key="Reason"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+						<when test="$winEventId = '2041'">
+							<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+								<attrKeyMap attr="reason" key="Reason"/>
+								<attrKeyMap attr="profileName" key="Profile"/>
+							</collectFieldsByKeyValuePair>
+						</when>
+					</choose>
+				</when>
+				<otherwise>
+					<setEventAttribute attr="_et">combineMsgId($activityType, "-", $_sourceName)</setEventAttribute>
+				</otherwise>
+			</choose>
+		</when>
+		<otherwise>
+			<setEventAttribute attr="_et">combineMsgId($activityType, "-", $_sourceName)</setEventAttribute>
+		</otherwise>
+	</choose>
+	<when test="not_exist _et">
+		<when test="exist activityType">
+			<setEventAttribute attr="_et">replaceStringByRegex($activityType, "\s+", "-")</setEventAttribute>
+			<when test="exist _sourceName">
+				<setEventAttribute attr="_et">combineMsgId($_et, "-", $_sourceName)</setEventAttribute>
+			</when>
+		</when>
+	</when>
+	<choose>
+		<when test="exist _et">
+			<setEventAttribute attr="eventType">combineMsgId("Win-", $_et)</setEventAttribute>
+			<when test="exist winEventId">
+				<setEventAttribute attr="eventType">combineMsgId("Win-", $_et, "-", $winEventId)</setEventAttribute>
+				<choose>
+					<when test="$_et = 'DNS'">
+						<choose>
+							<when test="$winEventId = '256'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Query-received")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '257'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Response-success")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '258'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Response-failure")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '259'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Ignored-query")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '260'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Query-out")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '261'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Response-in")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '262'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Recursive-query-timeout")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '263'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Update-in")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '264'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Update-response")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '265'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-IXFR-request-out")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '266'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-IXFR-request-in")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '267'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-IXFR-response-out")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '268'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-IXFR-response-in")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '269'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-AXFR-request-out")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '270'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-AXFR-request-in")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '271'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-AXFR-response-out")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '272'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-AXFR-response-in")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '273'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-XFR-notification-in")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '274'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-XFR-notification-out")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '275'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-XFR-notify-ACK-in")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '276'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-XFR-notify-ACK-out")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '277'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Update-forward")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '278'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Update-response-in")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '279'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Internal-lookup-CNAME")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '280'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Internal-lookup-additional")</setEventAttribute>
+							</when>
+							<when test="exist type">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-", $type)</setEventAttribute>
+							</when>
+						</choose>
+						<switch>
+							<case>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[^The zone <:gPatMesgBodyMin> was <_action:patDNSAction>\b]]></regex>
+								</collectFieldsByRegex>
+								<choose>
+									<when test="$_action = 'created'">
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-Zone-Created")</setEventAttribute>
+									</when>
+									<when test="$_action = 'deleted'">
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-Zone-Delete")</setEventAttribute>
+									</when>
+									<when test="$_action = 'updated'">
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-Zone-Updated")</setEventAttribute>
+									</when>
+									<otherwise/>
+								</choose>
+							</case>
+							<case>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[^A resource record ]]></regex>
+								</collectFieldsByRegex>
+								<choose>
+									<when test="$winEventId = '515'">
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-Record-Create")</setEventAttribute>
+									</when>
+									<when test="$winEventId = '516'">
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-Record-Delete")</setEventAttribute>
+									</when>
+									<when test="$winEventId = '517'">
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-RRSET-Delete")</setEventAttribute>
+									</when>
+									<when test="$winEventId = '518'">
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-Node-Delete")</setEventAttribute>
+									</when>
+									<when test="$winEventId = '519'">
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-Record-Create-Dynamic-Update")</setEventAttribute>
+									</when>
+									<when test="$winEventId = '520'">
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-Record-Delete-Dynamic-Update")</setEventAttribute>
+									</when>
+									<when test="$winEventId = '521'">
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-Record-Scavenge")</setEventAttribute>
+									</when>
+								</choose>
+							</case>
+							<default/>
+						</switch>
+					</when>
+					<when test="$_et = 'IIS'">
+						<when test="exist _msg">
+							<collectAndSetAttrByKeyValuePair sep=" " src="$_msg">
+								<attrKeyMap attr="srcIpAddr" key="c-ip "/>
+								<attrKeyMap attr="cookie" key="cs(Cookie) "/>
+								<attrKeyMap attr="httpReferrer" key="cs(Referer) "/>
+								<attrKeyMap attr="httpUserAgent" key="cs(User-Agent) "/>
+								<attrKeyMap attr="sentBytes64" key="cs-bytes "/>
+								<attrKeyMap attr="httpMethod" key="cs-method "/>
+								<attrKeyMap attr="uriQuery" key="cs-uri-query "/>
+								<attrKeyMap attr="uriStem" key="cs-uri-stem "/>
+								<attrKeyMap attr="user" key="cs-username "/>
+								<attrKeyMap attr="httpVersion" key="cs-version "/>
+								<attrKeyMap attr="destName" key="s-computername "/>
+								<attrKeyMap attr="destIpAddr" key="s-ip "/>
+								<attrKeyMap attr="destIpPort" key="s-port "/>
+								<attrKeyMap attr="recvBytes64" key="sc-bytes "/>
+								<attrKeyMap attr="httpStatusCode" key="sc-status "/>
+								<attrKeyMap attr="httpSubStatusCode" key="sc-substatus "/>
+								<attrKeyMap attr="httpWin32Status" key="sc-win32-status "/>
+								<attrKeyMap attr="durationMSec" key="time-taken "/>
+							</collectAndSetAttrByKeyValuePair>
+						</when>
+					</when>
+					<when test="$_et = 'PrintService'">
+						<choose>
+							<when test="$winEventId = '99'">
+								<setEventAttribute attr="eventType">Win-PrintService-Encountered-Fatal-Error</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[\([^,]+,\s*error\s+<errorString:gPatMesgBodyMin>\).*Try\s+to\s+<incidentReso:gPatMesgBody>]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '100'">
+								<setEventAttribute attr="eventType">Win-PrintService-Add-Printer-Successed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Printer\s+<printer:gPatMesgBodyMin>\s+successfully]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '101'">
+								<setEventAttribute attr="eventType">Win-PrintService-Add-Printer-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatStrComma>, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '104'">
+								<setEventAttribute attr="eventType">Win-PrintService-Delete-Printer-Succeeded</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> succeeded.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '105'">
+								<setEventAttribute attr="eventType">Win-PrintService-Delete-Printer-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> failed, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '106'">
+								<setEventAttribute attr="eventType">Win-PrintService-Start-Doc-Job-Succeeded</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[job <jobName:gPatMesgBodyMin> for printer <printer:gPatMesgBodyMin> succeeded.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '107'">
+								<setEventAttribute attr="eventType">Win-PrintService-Start-Doc-Job-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[job <jobName:gPatMesgBodyMin> for printer <printer:gPatMesgBodyMin> failed, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '110'">
+								<setEventAttribute attr="eventType">Win-PrintService-End-Doc-Job-Succeeded</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[job <jobName:gPatMesgBodyMin> for printer <printer:gPatMesgBodyMin> succeeded.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '111'">
+								<setEventAttribute attr="eventType">Win-PrintService-End-Doc-Job-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[job <jobName:gPatMesgBodyMin> for printer <printer:gPatMesgBodyMin> failed, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '114'">
+								<setEventAttribute attr="eventType">Win-PrintService-Add-Driver-Succeeded</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer driver <printerDriver:gPatMesgBodyMin> succeeded.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '115'">
+								<setEventAttribute attr="eventType">Win-PrintService-Add-Driver-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer driver <printerDriver:gPatMesgBodyMin> failed, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '118'">
+								<setEventAttribute attr="eventType">Win-PrintService-Open-Printer-Succeeded</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> succeeded.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '119'">
+								<setEventAttribute attr="eventType">Win-PrintService-Open-Printer-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> failed, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '122'">
+								<setEventAttribute attr="eventType">Win-PrintService-Start-Page-Job-Succeeded</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[job <jobName:gPatMesgBodyMin> at printer <printer:gPatMesgBodyMin> succeeded.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '123'">
+								<setEventAttribute attr="eventType">Win-PrintService-Start-Page-Job-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin>, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '124'">
+								<setEventAttribute attr="eventType">Win-PrintService-End-Page-Job-Succeeded</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[job <jobName:gPatMesgBodyMin> at printer <printer:gPatMesgBodyMin> succeeded.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '125'">
+								<setEventAttribute attr="eventType">Win-PrintService-End-Page-Job-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[job <jobName:gPatMesgBodyMin> at printer <printer:gPatMesgBodyMin> failed, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '131'">
+								<setEventAttribute attr="eventType">Win-PrintService-Set-Printer-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> failed, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '200'">
+								<setEventAttribute attr="eventType">Win-PrintService-Add-CSR-Printer-Connection-Succeeded</setEventAttribute>
+							</when>
+							<when test="$winEventId = '201'">
+								<setEventAttribute attr="eventType">Win-PrintService-Add-CSR-Printer-Connection-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '204'">
+								<setEventAttribute attr="eventType">Win-PrintService-Delete-CSR-Printer-Connection-Succeeded</setEventAttribute>
+							</when>
+							<when test="$winEventId = '205'">
+								<setEventAttribute attr="eventType">Win-PrintService-Delete-CSR-Printer-Connection-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '207'">
+								<setEventAttribute attr="eventType">Win-PrintService-Open-CSR-Printer-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> failed, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '210'">
+								<setEventAttribute attr="eventType">Win-PrintService-Close-CSR-Printer-Succeeded</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> succeeded.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '211'">
+								<setEventAttribute attr="eventType">Win-PrintService-Close-CSR-Printer-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> failed, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '212'">
+								<setEventAttribute attr="eventType">Win-PrintService-Parse-Inf-Succeeded</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer driver <printerDriver:gPatMesgBodyMin> succeeded]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '213'">
+								<setEventAttribute attr="eventType">Win-PrintService-Parse-Inf-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer driver <printerDriver:gPatMesgBodyMin> failed .*, error code <errorCode:gPatStrComma>, HRESULT <actionResult:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '214'">
+								<setEventAttribute attr="eventType">Win-PrintService-Install-Driver-Succeeded</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer driver <printerDriver:gPatMesgBodyMin> succeeded.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '215'">
+								<setEventAttribute attr="eventType">Win-PrintService-Install-Driver-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer driver <printerDriver:gPatMesgBodyMin> failed, error code <errorCode:gPatStrComma>, HRESULT <actionResult:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '216'">
+								<setEventAttribute attr="eventType">Win-PrintService-Setup-Succeeded</setEventAttribute>
+							</when>
+							<when test="$winEventId = '217'">
+								<setEventAttribute attr="eventType">Win-PrintService-Setup-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[error code <errorCode:gPatStrComma>, HRESULT <actionResult:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '218'">
+								<setEventAttribute attr="eventType">Win-PrintService-Copy-Driver-Package-Succeeded</setEventAttribute>
+							</when>
+							<when test="$winEventId = '219'">
+								<setEventAttribute attr="eventType">Win-PrintService-Copy-Driver-Package-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[error code <errorCode:gPatStrComma>, HRESULT <actionResult:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '220'">
+								<setEventAttribute attr="eventType">Win-PrintService-Retrieve-CSR-Cache-Succeeded</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> succeeded.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '221'">
+								<setEventAttribute attr="eventType">Win-PrintService-Retrieve-CSR-Cache-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> failed, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '224'">
+								<setEventAttribute attr="eventType">Win-PrintService-Driver-Package-Operation-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[operation <opName:gPatMesgBodyMin> failed with error code <errorCode:gPatStrComma>, server name <serverName:patStrDot>\..* caused by\s*<errReason:gPatMesgBody>]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '225,226,227,229,235,236,237,238,239,240'">
+								<setEventAttribute attr="eventType">Win-PrintService-Install-Driver-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer driver '<printerDriver:gPatStrSQ>'\.(?:\s*Error\s+code: <errorCode:patStrDot>\.)?\s*<errReason:gPatMesgBody>]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '228,230'">
+								<setEventAttribute attr="eventType">Win-PrintService-Install-Driver-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer driver '<printerDriver:gPatStrSQ>'\.\s*<errReason:patStrDot>\.\s*Error code: <errorCode:patStrDot>\.<incidentReso:gPatMesgBody>]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '231,232,233,241'">
+								<setEventAttribute attr="eventType">Win-PrintService-Upgrade-Driver-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[driver '<printerDriver:gPatStrSQ>'<errReason:patStrDot>\.<incidentReso:gPatMesgBody>]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '234'">
+								<setEventAttribute attr="eventType">Win-PrintService-Delete-Driver-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[driver '<printerDriver:gPatStrSQ>'.<errReason:patStrDot>\.\s*Error code:<errorCode:patStrDot>\.<incidentReso:gPatMesgBody>]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '242'">
+								<setEventAttribute attr="eventType">Win-PrintService-Configure-Queue-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[driver '<printerDriver:gPatStrSQ>']]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '300,302,303,304'">
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Printer <printer:gPatMesgBodyMin> (?:was|will be) <_action:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+								<setEventAttribute attr="eventType">combineMsgId("Win-PrintService-Printer-", $_action)</setEventAttribute>
+							</when>
+							<when test="$winEventId = '301'">
+								<setEventAttribute attr="eventType">Win-PrintService-Printer-deleted</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Printer <printer:gPatMesgBodyMin> was <:gPatStrComma>,]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '305'">
+								<setEventAttribute attr="eventType">Win-PrintService-Delete-Jobs</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> were deleted.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '306'">
+								<setEventAttribute attr="eventType">Win-PrintService-Change-Settings</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> were changed.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '307'">
+								<setEventAttribute attr="eventType">Win-PrintService-Doc-printed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Document <seqNum:gPatStrComma>,<:gPatMesgBodyMin> owned by <fileOwner:gPatMesgBodyMin> on <:gPatMesgBodyMin> was printed on <printer:gPatMesgBodyMin> through port <targetName:gPatMesgBodyMin>\.\s*Size in bytes:\s*<fileSize64:gPatInt>\.\s*Pages printed:\s*<prtPrintPageCount:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '308,309,310'">
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Document <fileName:gPatStrComma>,.* owned by <fileOwner:gPatMesgBodyMin> was <_action:gPatStr> on <:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+								<setEventAttribute attr="eventType">combineMsgId("Win-PrintService-Doc-", $_action)</setEventAttribute>
+							</when>
+							<when test="$winEventId = '311'">
+								<setEventAttribute attr="eventType">Win-PrintService-Doc-Moved</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[document <fileName:gPatStrComma>,.* owned by <fileOwner:gPatMesgBodyMin> to .* on <printer:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '312,313'">
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Form <:gPatMesgBodyMin> was <_action:patStrDot>\. ]]></regex>
+								</collectFieldsByRegex>
+								<setEventAttribute attr="eventType">combineMsgId("Win-PrintService-Form-", $_action)</setEventAttribute>
+							</when>
+							<when test="$winEventId = '314'">
+								<setEventAttribute attr="eventType">Win-PrintService-Job-Time-Out</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Document <fileName:gPatStrComma>,.* owned by <fileOwner:gPatMesgBodyMin> timed out while printing on <printer:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '315'">
+								<setEventAttribute attr="eventType">Win-PrintService-Share-Printer-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> with shared resource name <resourceName:patStrDot>\. Error\s*<errorString:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '316'">
+								<setEventAttribute attr="eventType">Win-PrintService-Add-Driver</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Printer driver <printerDriver:gPatMesgBodyMin> for .*. Files:\s*<fileName:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '317'">
+								<setEventAttribute attr="eventType">Win-PrintService-Driver-deleted</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Printer driver <printerDriver:gPatMesgBodyMin> was .*]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '318'">
+								<setEventAttribute attr="eventType">Win-PrintService-Upgrade-Settings</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> driver <printerDriver:patStrDot>\. Error:\s*<errorString:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '319,320'">
+								<setEventAttribute attr="eventType">Win-PrintService-Initialize-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Printer <printer:gPatMesgBodyMin> failed to initialize because\s+<errReason:gPatMesgBodyMin>]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '321'">
+								<setEventAttribute attr="eventType">Win-PrintService-Add-File</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[File\(s\) <fileName:gPatMesgBodyMin> associated with printer <printer:gPatMesgBodyMin> were .*]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '322,323,326,327,328,329,331,333'">
+								<setEventAttribute attr="eventType">Win-PrintService-Publish-Printer-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*,[^.]+.\s*Error:<errorString:patStrDot>\.?]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '325'">
+								<setEventAttribute attr="eventType">Win-PrintService-Remove-Printer-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\.\s*Error:<errorString:patStrDot>\.?]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '332'">
+								<setEventAttribute attr="eventType">Win-PrintService-Publish-Printer-Successed</setEventAttribute>
+							</when>
+							<when test="$winEventId = '334'">
+								<setEventAttribute attr="eventType">Win-PrintService-Remove-Printer-Successed</setEventAttribute>
+							</when>
+							<when test="$winEventId = '335'">
+								<setEventAttribute attr="eventType">Win-PrintService-Remove-Printer-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\.\s*Error:<errorString:patStrDot>]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '336'">
+								<setEventAttribute attr="eventType">Win-PrintService-Update-Queue</setEventAttribute>
+							</when>
+							<when test="$winEventId = '337'">
+								<setEventAttribute attr="eventType">Win-PrintService-Find-Queue-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.* domain <domain:patStrDot>\..*\.\s*Error:\s*<errorString:gPatMesgBody>]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '338'">
+								<setEventAttribute attr="eventType">Win-PrintService-Removed-Printer-Successed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Printer <printer:gPatMesgBodyMin> was.*]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '342,344,345,346'">
+								<setEventAttribute attr="eventType">Win-PrintService-Remove-Queue-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*(?:\s+because\s+<errReason:patStrDot>)?\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '343'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Connect-Queue-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\.\s+Error <errorString:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '347'">
+								<setEventAttribute attr="eventType">Win-PrintService-Delete-Queue-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\.\s*Error: <errorString:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '348'">
+								<setEventAttribute attr="eventType">Win-PrintService-Incompatible-Driver</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[This version of <printerDriver:gPatMesgBodyMin> is .*\.\s*Please <incidentReso:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '349'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Create-Link-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\.\s*Error <errorString:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '350'">
+								<setEventAttribute attr="eventType">Win-PrintService-Print-File-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Document <fileName:gPatMesgBodyMin> failed .* because of <errReason:patStrDot>\..* driver is: <printerDriver:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '351'">
+								<setEventAttribute attr="eventType">Win-PrintService-Incompatible-Driver</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*because <errReason:patStrDot>\.\s+Please <incidentReso:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '352'">
+								<setEventAttribute attr="eventType">Win-PrintService-Change-Priority</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[document <fileName:gPatStrComma>,.* owned by <fileOwner:gPatMesgBodyMin> was changed to <:gPatMesgBodyMin> on <printer:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '353'">
+								<setEventAttribute attr="eventType">Win-PrintService-Print-Doc-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*because <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '354'">
+								<setEventAttribute attr="eventType">Win-PrintService-Initialization-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[<osObjName:gPatMesgBodyMin> initialization failed at <fileName:patStrDot>\. Error: <errorString:patStrDot>\.\s*This can occur because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '356'">
+								<setEventAttribute attr="eventType">Win-PrintService-Install-Driver-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[driver <printerDriver:gPatMesgBodyMin> on cluster spooler resource <resourceName:patStrDot>\.\s*Win32 error: <errorCode:patStrDot>\..* because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '359'">
+								<setEventAttribute attr="eventType">Win-PrintService-Install-Driver-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> into .* error code <errorCode:patStrDot>\.\s*This can occur if <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '360'">
+								<setEventAttribute attr="eventType">Win-PrintService-Update-Color-Profile-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> with Win32 error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '361'">
+								<setEventAttribute attr="eventType">Win-PrintService-Initialize-Port-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Printer <printer:gPatMesgBodyMin> failed .* Win32 error: <errorCode:patStrDot>\..* because of <errReason:patStrDot>\. Try <incidentReso:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '362'">
+								<setEventAttribute attr="eventType">Win-PrintService-Initialize-Spooler-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.* error code <errorCode:patStrDot>\..*Try <incidentReso:patStrDot>.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '363'">
+								<setEventAttribute attr="eventType">Win-PrintService-Start-Spooler-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[The print spooler <procName:gPatMesgBodyMin> failed .*]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '364,365'">
+								<setEventAttribute attr="eventType">Win-PrintService-Load-Print-Processor-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[processor <procName:gPatMesgBodyMin> because <errReason:patStrDot>\.(\s*Error code <errorCode:patStrDot>\.)?\s*Module: <module:patStrDot>\.\s*Please\s*<incidentReso:patStrDot>]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '366'">
+								<setEventAttribute attr="eventType">Win-PrintService-Descriptor-Invalid</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.* for <originalSecurityDescriptor:gPatMesgBodyMin> is invalid.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '367'">
+								<setEventAttribute attr="eventType">Win-PrintService-Initialize-Printer-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> because <errReason:patStrDot>\. Please <incidentReso:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '368'">
+								<setEventAttribute attr="eventType">Win-PrintService-Verify-Driver-Package-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*Win32 system error code <errorCode:patStrDot>. This can occur <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '369'">
+								<setEventAttribute attr="eventType">Win-PrintService-Verify-Driver-Package-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*Win32 system error code <errorCode:patStrDot>\.\s*This can occur because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '370'">
+								<setEventAttribute attr="eventType">Win-PrintService-Regenerate-Driver-Info-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[driver <printerDriver:gPatMesgBodyMin> for environment <:patStrDot>\.\s*Win32 system error code <errorCode:patStrDot>\. This can occur <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '371'">
+								<setEventAttribute attr="eventType">Win-PrintService-Unshare-Printer-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[printer <printer:gPatMesgBodyMin> which .*\.\s*Error <errorString:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '372'">
+								<setEventAttribute attr="eventType">Win-PrintService-Print-Doc-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[The document <fileName:gPatStrComma>,\s*owned by <fileOwner:gPatStrComma>,\s*failed to print on printer <printer:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '373'">
+								<setEventAttribute attr="eventType">Win-PrintService-Unusual-GDI</setEventAttribute>
+							</when>
+							<when test="$winEventId = '502'">
+								<setEventAttribute attr="eventType">Win-PrintService-Get-Computer-Name-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*Error <errorString:patStrDot>\.\s+This can occur <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '503'">
+								<setEventAttribute attr="eventType">Win-PrintService-Initial-Print-Provider-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*Error <errorString:patStrDot>\. This can occur because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '504'">
+								<setEventAttribute attr="eventType">Win-PrintService-Initial-Router-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*Error <errorString:patStrDot>\. This can occur because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '505'">
+								<setEventAttribute attr="eventType">Win-PrintService-Create-Phase2Init-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*Error <errorString:patStrDot>\. This can occur because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '507'">
+								<setEventAttribute attr="eventType">Win-PrintService-Initial-Name-Cache-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*Error <errorString:patStrDot>\. This can occur because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '508'">
+								<setEventAttribute attr="eventType">Win-PrintService-Initial-Router-Cache-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*Error <errorString:patStrDot>\. This can occur because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '509'">
+								<setEventAttribute attr="eventType">Win-PrintService-Start-Spooler-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*because <errorString:patStrDot>\. Error code <errorCode:patStrDot>\. This can\s+occur because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '510'">
+								<setEventAttribute attr="eventType">Win-PrintService-InitializeProvider-Allocate-Mem-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\s*for <errorString:patStrDot>\. This can occur because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '511'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Load-Provider-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\s*provider <providerName:patStrDot>\. This can occur because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '512'">
+								<setEventAttribute attr="eventType">Win-PrintService-InitializePrintProvider-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\s*provider <providerName:patStrDot>\. This can occur because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '513'">
+								<setEventAttribute attr="eventType">Win-PrintService-Policy-add-Connecton-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\s*Error code <errorCode:patStrDot>\. This can occur <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '514,515,516'">
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Group Policy was unable to <_action:gPatStr> per computer printer connection <:patStrDot>\.\s*Error <errorString:patStrDot>\.\s*<:patStrDot>\.\s*This can occur <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+								<setEventAttribute attr="eventType">combineMsgId("Win-PrintService-Policy-", $_action,"-Connecton-Failed")</setEventAttribute>
+							</when>
+							<when test="$winEventId IN '517,518,519,520'">
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Group Policy was unable to <_action:gPatStr> (?:the )?per (computer|user) printer connection <:patStrDot>\. Error code <errorCode:patStrDot>\.(\s*[^.]+\.)?\s*This can occur <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+								<setEventAttribute attr="eventType">combineMsgId("Win-PrintService-Policy-", $_action,"-Connecton-Failed")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '600'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Import-Driver-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\s*driver <printerDriver:patStrDot>\. Error code=\s*<errorCode:patStrDot>\. This can occur <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '601'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Download-Driver-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\s*for\s+driver <printerDriver:patStrDot>\. Error code=\s*<errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '602,603'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Reopen-Connection-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\s*because <errorString:patStrDot>\.(\s*[^.]+\.)?\s*This can occur if <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '604'">
+								<setEventAttribute attr="eventType">Win-PrintService-Encountered-Unknown-Driver-Type</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*This can occur\s+because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '701'">
+								<setEventAttribute attr="eventType">Win-PrintService-Initial-Filter-Host-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*Error <errorString:patStrDot>\.\s*This can occur because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '702'">
+								<setEventAttribute attr="eventType">Win-PrintService-Filter-Host-Shut-Down</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*Error <errorString:patStrDot>\. This can occur\s+because of <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '703,704'">
+								<setEventAttribute attr="eventType">Win-PrintService-Filter-Host-Shut-Down</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\s*(due to|because) <errReason:patStrDot>\. Error <errorString:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '800,801,802,805,806,807'">
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[^<_action:gPatStr> job <jobName:patStrDot>\.$]]></regex>
+								</collectFieldsByRegex>
+								<setEventAttribute attr="eventType">combineMsgId("Win-PrintService-", $_action, "-Job")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '808'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Load-Module-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[module <module:gPatStrComma>, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '809'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Delete-Directory-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[directory <dirName:gPatStrComma>, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '810'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Delete-Directory-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[directory <dirName:gPatMesgBodyMin> and.*error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '811,812,813'">
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[ <_action:gPatStr> the file <fileName:gPatMesgBodyMin>(?: to <destFileName:gPatStrComma>)?, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+								<setEventAttribute attr="eventType">combineMsgId("Win-PrintService-Spooler-", $_action, "-File-Failed")</setEventAttribute>
+							</when>
+							<when test="$winEventId = '814'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Install-Processor-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.* processor <procName:gPatStrComma>, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '815'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Register-RPC-Proto-Seq-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '816'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Detected-Invalid-RPC-Proto-Seq</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '817'">
+								<setEventAttribute attr="eventType">Win-PrintService-RPC-Policy-Disabled</setEventAttribute>
+							</when>
+							<when test="$winEventId = '818'">
+								<setEventAttribute attr="eventType">Win-PrintService-Start-RPC-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '819'">
+								<setEventAttribute attr="eventType">Win-PrintService-Client-Rendering-Disabled</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*policy \(<policyName:patStrRightParen>\)\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '820'">
+								<setEventAttribute attr="eventType">Win-PrintService-Client-Rendering-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '821'">
+								<setEventAttribute attr="eventType">Win-PrintService-Client-Rendering-Render-Job</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.* job <jobName:gPatMesgBodyMin> on the server \(Server Side\s+Rendering\), status <status:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '822'">
+								<setEventAttribute attr="eventType">Win-PrintService-Client-Rendering-Disabled</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Unknown print processor \(<procName:patStrRightParen>\) or invalid data type \(<type:patStrRightParen>\), error <errorString:gPatStrComma>,.*]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '823'">
+								<setEventAttribute attr="eventType">Win-PrintService-Changed-Default-Printer</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[The default printer was changed to <printer:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '825'">
+								<setEventAttribute attr="eventType">Win-PrintService-Client-Rendering-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '826'">
+								<setEventAttribute attr="eventType">Win-PrintService-Set-Rendering-Policy-Successfully</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*printer <printer:gPatStrComma>, path <servicePath:gPatStrComma>, port <appPort:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '827'">
+								<setEventAttribute attr="eventType">Win-PrintService-Print-Queue-Invalid</setEventAttribute>
+							</when>
+							<when test="$winEventId = '828'">
+								<setEventAttribute attr="eventType">Win-PrintService-Print-Job-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[The print job <jobName:gPatMesgBodyMin> failed with error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '829'">
+								<setEventAttribute attr="eventType">Win-PrintService-XPS-API-call-Started</setEventAttribute>
+							</when>
+							<when test="$winEventId = '830'">
+								<setEventAttribute attr="eventType">Win-PrintService-XPS-API-call-Ended</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*status <status:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '831'">
+								<setEventAttribute attr="eventType">Win-PrintService-XPS-API-dependency-Started</setEventAttribute>
+							</when>
+							<when test="$winEventId = '832'">
+								<setEventAttribute attr="eventType">Win-PrintService-XPS-API-dependency-Ended</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*status <status:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '833'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Operation-Started</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Print spooler operation <opName:gPatMesgBodyMin> \(<:patStrRightParen>\) started\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '834'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Operation-Ended</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Print spooler operation <opName:gPatMesgBodyMin> \(<:patStrRightParen>\) ended, status <status:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '842'">
+								<setEventAttribute attr="eventType">Win-PrintService-Send-Print-Job-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[The print job <jobName:gPatMesgBodyMin> was sent through the print processor <procName:gPatMesgBodyMin> on printer <printer:gPatStrComma>, driver <printerDriver:gPatStrComma>, in the isolation mode <connMode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '843'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Record-Active-Driver-Host</setEventAttribute>
+							</when>
+							<when test="$winEventId = '844'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Selected-Mode</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\s*mode <connMode:gPatStr> for printer <printer:gPatStrComma>,\s*printer driver <printerDriver:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '845'">
+								<setEventAttribute attr="eventType">Win-PrintService-Load-Module-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Attempted to load module <module:gPatMesgBodyMin> for printer <printer:gPatStrComma>, printer driver <printerDriver:patStrDot>\. Win32 error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '846'">
+								<setEventAttribute attr="eventType">Win-PrintService-Cached-Printer-Scavenged</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Cached printer\s+<printer:gPatMesgBodyMin> has been scavenged and deleted.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '847'">
+								<setEventAttribute attr="eventType">Win-PrintService-Deleting-Cached-Printer-Deletion</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Cached printer <printer:gPatMesgBodyMin> has .*]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '848'">
+								<setEventAttribute attr="eventType">Win-PrintService-Share-Printer</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Printer <printer:gPatMesgBodyMin> was .*]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '849'">
+								<setEventAttribute attr="eventType">Win-PrintService-Unshared-Printer</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Printer <printer:gPatMesgBodyMin> shared .*]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '850'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Initial-COM</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.* function <funName:gPatMesgBodyMin> in print driver module <module:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '851'">
+								<setEventAttribute attr="eventType">Win-PrintService-Point-And-Print-Not-Allowed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\.\s*Error <errorString:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '852'">
+								<setEventAttribute attr="eventType">Win-PrintService-Selected-Replacement-Driver</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[Driver <printerDriver:gPatMesgBodyMin> could .*]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '853,854'">
+								<setEventAttribute attr="eventType">Win-PrintService-Client-Rendering-Synchronization</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.* with code <:gPatMesgBodyMin> for\s+printer <printer:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '855'">
+								<setEventAttribute attr="eventType">Win-PrintService-Add-OpenPrinter-Cache-Entry</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.* printer <printer:gPatMesgBodyMin> with .*]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId IN '856,857,858,859,860,861,862,863'">
+								<setEventAttribute attr="eventType">Win-PrintService-Connection-Reconfigured</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*(because|due to) <errReason:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '864'">
+								<setEventAttribute attr="eventType">Win-PrintService-Scan-Servicing-Operation-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*HRESULT <actionResult:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '865'">
+								<setEventAttribute attr="eventType">Win-PrintService-Print-Job-Failures</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\s+printer '<printer:gPatStrSQ>' using driver '<printerDriver:gPatStrSQ>'\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '866'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Create-Plug-and-Play-Object-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\s+printer '<printer:gPatStrSQ>'\..*\. Error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '867'">
+								<setEventAttribute attr="eventType">Win-PrintService-Initial-Port-Monitor-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*error code: <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '868'">
+								<setEventAttribute attr="eventType">Win-PrintService-EventLog-Exceeded-Maxi-Size</setEventAttribute>
+							</when>
+							<when test="$winEventId = '869'">
+								<setEventAttribute attr="eventType">Win-PrintService-Add-Driver-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\s+driver <printerDriver:gPatMesgBodyMin> failed, error code <errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<when test="$winEventId = '870'">
+								<setEventAttribute attr="eventType">Win-PrintService-Spooler-Download-Driver-Failed</setEventAttribute>
+								<collectFieldsByRegex src="$_msg">
+									<regex><![CDATA[.*\s+driver <printerDriver:patStrDot>\. Error code=\s*<errorCode:patStrDot>\.]]></regex>
+								</collectFieldsByRegex>
+							</when>
+							<otherwise>
+								<setEventAttribute attr="eventType">Win-PrintService-Generic</setEventAttribute>
+							</otherwise>
+						</choose>
+						<when test="exist fileName">
+							<collectFieldsByRegex src="$fileName">
+								<regex><![CDATA[^(?:<filePath:gPatMesgBody>\\)?<fileName:gPatMesgBodyMin>\s*$]]></regex>
+							</collectFieldsByRegex>
+						</when>
+					</when>
+					<when test="$_et = 'Sysmon'">
+						<choose>
+							<when test="not_exist msg"/>
+							<when test="$msg = 'Clipboard changed'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Clipboard-Changed")</setEventAttribute>
+							</when>
+							<when test="$msg = 'CreateRemoteThread detected'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-CreateRemoteThread")</setEventAttribute>
+							</when>
+							<when test="$msg = 'Dns query'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-DNS-Query")</setEventAttribute>
+								<when test="not_exist srcIpAddr">
+									<when test="exist reptDevIpAddr">
+										<setEventAttribute attr="srcIpAddr">$reptDevIpAddr</setEventAttribute>
+									</when>
+								</when>
+							</when>
+							<when test="$msg = 'Driver loaded'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Driver-Loaded")</setEventAttribute>
+							</when>
+							<when test="$msg = 'Error report'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Error-Report")</setEventAttribute>
+							</when>
+							<when test="$msg = 'File Block Executable'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-FileBlockExecutable")</setEventAttribute>
+							</when>
+							<when test="$msg = 'File Block Shredding'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-FileBlockShredding")</setEventAttribute>
+							</when>
+							<when test="$msg = 'File created'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-FileCreate")</setEventAttribute>
+							</when>
+							<when test="$msg = 'File creation time changed'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-FileCreation-Time-Changed")</setEventAttribute>
+							</when>
+							<when test="$msg = 'File Delete logged'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-File-Delete-logged")</setEventAttribute>
+							</when>
+							<when test="$msg = 'File Executable Detected'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-FileExecutableDetected")</setEventAttribute>
+							</when>
+							<when test="$msg = 'File stream created'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-FileCreateStreamHash")</setEventAttribute>
+							</when>
+							<when test="$msg = 'Image loaded'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Image-Loaded")</setEventAttribute>
+							</when>
+							<when test="$msg = 'Network connection detected'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Network-Connect")</setEventAttribute>
+								<choose>
+									<when test="not_exist _v6">
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-IPv4")</setEventAttribute>
+									</when>
+									<when test="$_v6 = 'true'">
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-IPv6")</setEventAttribute>
+									</when>
+									<otherwise>
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-IPv4")</setEventAttribute>
+									</otherwise>
+								</choose>
+							</when>
+							<when test="$msg IN 'Process access, Process accessed'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-ProcessAccess")</setEventAttribute>
+							</when>
+							<when test="$msg = 'Process Create'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Create-Process")</setEventAttribute>
+							</when>
+							<when test="$msg = 'Process Tampering'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Process-Tampering")</setEventAttribute>
+							</when>
+							<when test="$msg = 'Process terminated'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Process-Terminated")</setEventAttribute>
+							</when>
+							<when test="$msg = 'RawAccessRead detected'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-RawAccessRead")</setEventAttribute>
+							</when>
+							<when test="$msg IN 'Registry object added or deleted, Registry object renamed'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Registry-", $osObjAction)</setEventAttribute>
+							</when>
+							<when test="$msg = 'Registry value set'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Registry-", $osObjAction)</setEventAttribute>
+								<when test="exist details">
+									<setEventAttribute attr="newRegValue">$details</setEventAttribute>
+								</when>
+								<when test="exist regKeyPath">
+									<switch>
+										<case>
+											<collectFieldsByRegex src="$regKeyPath">
+												<regex><![CDATA[^<:gPatMesgBody>[\\]<regValueName:gPatMesgBodyMin>$]]></regex>
+											</collectFieldsByRegex>
+										</case>
+										<default>
+											<setEventAttribute attr="regValueName">$regKeyPath</setEventAttribute>
+										</default>
+									</switch>
+								</when>
+							</when>
+							<when test="$msg = 'Sysmon config state changed'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-Config-State-Changed")</setEventAttribute>
+							</when>
+							<when test="$msg = 'Sysmon service state changed'">
+								<choose>
+									<when test="exist monitorState">
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-Service-State-Change-", $monitorState)</setEventAttribute>
+									</when>
+									<otherwise>
+										<setEventAttribute attr="eventType">combineMsgId($eventType, "-Service-State-Change")</setEventAttribute>
+									</otherwise>
+								</choose>
+							</when>
+							<when test="$msg = 'WmiEventConsumer activity detected'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-WMI-Event-Consumer-Activity")</setEventAttribute>
+							</when>
+							<when test="$msg = 'WmiEventConsumerToFilter activity detected'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-WMI-Event-ConsumerToFilter-Activity")</setEventAttribute>
+							</when>
+							<when test="$msg = 'WmiEventFilter activity detected'">
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-WMI-Event-Filter-Activity")</setEventAttribute>
+							</when>
+							<otherwise>
+								<setEventAttribute attr="_et">replaceStringByRegex($msg, "\s+", "-")</setEventAttribute>
+								<setEventAttribute attr="eventType">combineMsgId($eventType, "-", $_et)</setEventAttribute>
+							</otherwise>
+						</choose>
+					</when>
+					<when test="$_et = 'AD-FS'">
+						<choose>
+							<when test="not_exist winEventId"/>
+							<when test="$winEventId = '364'">
+								<!-- WSFederationPassiveRequestFailedError -->
+								<when test="exist _msg">
+									<setEventAttribute attr="_msg">replaceStrInStr($_msg, "\r\n", " ")</setEventAttribute>
+									<switch>
+										<case>
+											<collectFieldsByRegex src="$_msg">
+												<regex><![CDATA[Additional Data\s+Protocol Name:\s+<appTransportProto:gPatStr>\s+Relying Party:\s+<srcApp:gPatStr>\s+Exception details:\s+<errReason:gPatMesgBody>]]></regex>
+											</collectFieldsByRegex>
+										</case>
+										<default/>
+									</switch>
+								</when>
+							</when>
+						</choose>
+					</when>
+					<when test="$activityType = 'Application'">
+						<choose>
+							<when test="$winEventId = '208'">
+								<switch>
+									<case>
+										<collectFieldsByRegex src="$_msg">
+											<regex><![CDATA[\[SQL Server Scheduled Job 'Microsoft_ApplicationServer_Monitoring_<jobName:patStrQuote>' \([^)]+\) - Status\]="<_status:patStrQuote>]]></regex>
+										</collectFieldsByRegex>
+										<collectFieldsByRegex src="$_status">
+											<regex><![CDATA[<_statusCode:gPatWord> - Invoked on: .* Message: <errorString:patStrDot>\. .* invoked by <caller:patStrDot>\. The last step to run was <lastStep:patStrDot>\.]]></regex>
+										</collectFieldsByRegex>
+										<choose>
+											<when test="$_statusCode = 'Failed'">
+												<setEventAttribute attr="jobStatus">0</setEventAttribute>
+											</when>
+											<when test="$_statusCode = 'Success'">
+												<setEventAttribute attr="jobStatus">1</setEventAttribute>
+											</when>
+										</choose>
+									</case>
+									<default/>
+								</switch>
+							</when>
+							<!-- MS-SQL successful login (non-trusted and trusted) -->
+							<when test="$winEventId IN '18453,18454'">
+								<!-- Thu Feb 6 09:56:09 2014 10.60.60.7 AccelOps-WinLog-WMI [Category]="4" [CategoryString]="Logon" [ComputerName]="host" [Data]="(21,72,0,0,10,0,0,0,10,0,0,0,72,0,69,0,80,0,72,0,69,0,83,0,84,0,85,0,83,0,0,0,7,0,0,0,109,0,97,0,115,0,116,0,101,0,114,0,0,0)" [EventCode]="18453" [EventIdentifier]="1073760277" [EventType]="4" [Logfile]="Application" [RecordNumber]="4878127" [SourceName]="MSSQLSERVER" [TimeGenerated]="20140206095525.000000+120" [TimeWritten]="20140206095525.000000+120" [Type]="Audit Success" [User]="host\user" [Login succeeded for user 'host\user'.  Connection]="trusted. [CLIENT: 192.168.132.40]" -->
+								<switch>
+									<case>
+										<collectAndSetAttrByRegex src="$_msg">
+											<regex><![CDATA[Login\s+succeeded\s+for\s+user\s+'<user:patStrQuote>'\.\s+Connection:\s*<_connType:gPatStr>\.\s+\[CLIENT:\s*<_srcId:gPatStrRightSB>\]]]></regex>
+										</collectAndSetAttrByRegex>
+									</case>
+									<case>
+										<collectAndSetAttrByRegex src="$_msg">
+											<regex><![CDATA[\[Login succeeded for user '<user:patStrQuote>'\.\s+Connection\]=".*\s\[CLIENT:\s+<_srcId:gPatStrRightSB>\]]]></regex>
+										</collectAndSetAttrByRegex>
+									</case>
+									<case>
+										<collectAndSetAttrByRegex src="$_msg">
+											<regex><![CDATA[Login succeeded for user '<user:patStrQuote>'\..*\[CLIENT\]="\s*<_srcId:gPatStrRightSB>\]]]></regex>
+										</collectAndSetAttrByRegex>
+									</case>
+									<case>
+										<collectAndSetAttrByRegex src="$_msg">
+											<regex><![CDATA['<user:patStrQuote>'\.\s+.+?\.\s+\[.+?[ :="]+<_srcId:gPatStrRightSB>\]]]></regex>
+										</collectAndSetAttrByRegex>
+									</case>
+									<case>
+										<collectAndSetAttrByRegex src="$_msg">
+											<regex><![CDATA['<user:patStrQuote>'\s+.*\.\s+\[CLIENT: <_srcId:gPatStrRightSB>\]]]></regex>
+										</collectAndSetAttrByRegex>
+									</case>
+									<case>
+										<collectAndSetAttrByRegex src="$_msg">
+											<regex><![CDATA[.*\s+\[CLIENT: <_srcId:gPatStrRightSB>\]]]></regex>
+										</collectAndSetAttrByRegex>
+									</case>
+									<default/>
+								</switch>
+								<switch>
+									<case>
+										<collectFieldsByRegex src="$_srcId">
+											<regex><![CDATA[local machine]]></regex>
+										</collectFieldsByRegex>
+										<setEventAttribute attr="srcIpAddr">$reptDevIpAddr</setEventAttribute>
+										<setEventAttribute attr="srcName">$_srcId</setEventAttribute>
+									</case>
+									<case>
+										<collectFieldsByRegex src="$_srcId">
+											<regex><![CDATA[^<srcIpAddr:gPatIpAddr>$]]></regex>
+										</collectFieldsByRegex>
+									</case>
+									<default/>
+								</switch>
+							</when>
+							<!-- MS-SQL failed login -->
+							<when test="$winEventId = '18456'">
+								<switch>
+									<case>
+										<collectAndSetAttrByRegex src="$_msg">
+											<regex><![CDATA[^Login failed for user '<user:patStrQuote>'\..*?\[CLIENT: <_srcId:gPatStrRightSB>\]]]></regex>
+										</collectAndSetAttrByRegex>
+									</case>
+									<case>
+										<collectAndSetAttrByRegex src="$_msg">
+											<regex><![CDATA['<user:patStrQuote>'.*?(?:'<dbName:patStrQuote>')?\.\s+\[CLIENT: <_srcId:gPatStrRightSB>\]]]></regex>
+										</collectAndSetAttrByRegex>
+									</case>
+									<default/>
+								</switch>
+								<choose>
+									<when test="not_exist _srcId"/>
+									<when test="matches($_srcId, '^local machine$')">
+										<setEventAttribute attr="srcIpAddr">$reptDevIpAddr</setEventAttribute>
+									</when>
+									<otherwise>
+										<setEventAttribute attr="_srcAddr">$_srcId</setEventAttribute>
+									</otherwise>
+								</choose>
+							</when>
+							<!-- Starting up database 'mssql' -->
+							<when test="$winEventId = '17137'">
+								<collectAndSetAttrByRegex src="$_msg">
+									<regex><![CDATA[ database '<dbName:patStrQuote>']]></regex>
+								</collectAndSetAttrByRegex>
+							</when>
+						</choose>
+					</when>
+					<when test="$activityType = 'Microsoft-Windows-TaskScheduler/Operational'">
+						<setEventAttribute attr="eventType">combineMsgId("Win-TaskScheduler-", $winEventId)</setEventAttribute>
+					</when>
+					<when test="$activityType = 'System'">
+						<choose>
+							<when test="$winEventId = '98'">
+								<when test="$eventSource = 'Microsoft-Windows-Ntfs'">
+									<switch>
+										<case>
+											<collectFieldsByRegex src="$_msg">
+												<regex><![CDATA[Volume <diskName:patToRightBracket> <_desc:gPatMesgBody>]]></regex>
+											</collectFieldsByRegex>
+											<choose>
+												<when test="matches($_desc, 'needs to be taken offline to perform a Full Chkdsk')">
+													<setEventAttribute attr="eventType">combineMsgId($eventType, "-Chkdsk")</setEventAttribute>
+												</when>
+												<when test="matches($_desc, '^is healthy\.')">
+													<setEventAttribute attr="eventType">combineMsgId($eventType, "-Disk-Healthy")</setEventAttribute>
+												</when>
+											</choose>
+										</case>
+										<default/>
+									</switch>
+								</when>
+							</when>
+							<when test="$winEventId = '2020'">
+								<when test="exist _msg">
+									<collectFieldsByKeyValuePair kvsep=": " sep="\n" src="$_msg">
+										<attrKeyMap attr="_Set_ID" key="Set ID"/>
+										<attrKeyMap attr="_Set_Name" key="Set Name"/>
+										<attrKeyMap attr="origLocation" key="Origin"/>
+										<attrKeyMap attr="_Flags" key="Flags"/>
+										<attrKeyMap attr="_NumSuites" key="NumSuites"/>
+										<attrKeyMap attr="_TimeOutMinutes" key="TimeOutMinutes"/>
+										<attrKeyMap attr="_TimeOutSessions" key="TimeOutSessions"/>
+										<attrKeyMap attr="srcUser" key="ModifyingUser"/>
+										<attrKeyMap attr="srcApp" key="ModifyingApplication"/>
+									</collectFieldsByKeyValuePair>
+								</when>
+							</when>
+							<when test="$winEventId IN '1001, 1003'">
+								<collectAndSetAttrByRegex src="$_msg">
+									<regex><![CDATA[The <procName:gPatMesgBody> has]]></regex>
+								</collectAndSetAttrByRegex>
+								<setEventAttribute attr="hostIpAddr">$reptDevIpAddr</setEventAttribute>
+							</when>
+							<when test="$winEventId = '1074'">
+								<when test="exist _param7">
+									<setEventAttribute attr="user">$_param7</setEventAttribute>
+								</when>
+								<when test="exist _param4">
+									<setEventAttribute attr="errReason">$_param4</setEventAttribute>
+								</when>
+								<when test="exist _param5">
+									<setEventAttribute attr="shutdownReason">$_param5</setEventAttribute>
+								</when>
+								<when test="exist _param6">
+									<setEventAttribute attr="comment">$_param6</setEventAttribute>
+								</when>
+							</when>
+							<when test="$winEventId = '7045'">
+								<when test="$winEventId = '7045'">
+								<when test="exist _accountName">
+									<setEventAttribute attr="serviceAccount">$_accountName</setEventAttribute>
+								</when>
+								<when test="exist securityId">
+									<setEventAttribute attr="user">$securityId</setEventAttribute>
+									<setEventAttribute attr="domain">MH</setEventAttribute>
+								</when>
+							</when>
+							</when>
+							<when test="$winEventId = '10028'">
+								<switch>
+									<case>
+										<collectFieldsByRegex src="$_msg">
+											<regex><![CDATA[\[DCOM was unable to communicate with the computer <_srcAddr:gPatStr> using any of the configured protocols]]></regex>
+										</collectFieldsByRegex>
+									</case>
+									<default/>
+								</switch>
+							</when>
+							<when test="$winEventId IN '20250, 20255, 20271, 20272, 20274, 20275'">
+								<when test="$eventSource = 'RemoteAccess'">
+									<switch>
+										<case>
+											<collectFieldsByRegex src="$_msg">
+												<regex><![CDATA[\[(?:CoID|CoId)=[^\]]*\]=<_msg:gPatMesgBody>]]></regex>
+											</collectFieldsByRegex>
+										</case>
+										<case>
+											<collectFieldsByRegex src="$_body">
+												<regex><![CDATA[(?:CoID|CoId)=\{[^\}]*\}:\s*<_msg:gPatMesgBody>]]></regex>
+											</collectFieldsByRegex>
+										</case>
+										<default/>
+									</switch>
+									<when test="exist _msg">
+										<setEventAttribute attr="_msg">replaceStringByRegex($_msg, "\s*\"\s*$|\s*\"\s*", "")</setEventAttribute>
+										<switch>
+											<case>
+												<collectFieldsByRegex src="$_msg">
+													<regex><![CDATA[The user <user:gPatStr> has connected and has been successfully authenticated on port <appPort:patStrDot>\.]]></regex>
+												</collectFieldsByRegex>
+											</case>
+											<case>
+												<collectFieldsByRegex src="$_msg">
+													<regex><![CDATA[The following error occurred in the Point to Point Protocol module on port: <appPort:gPatStrComma>,\s*UserName:\s*<user:gPatStr>]]></regex>
+												</collectFieldsByRegex>
+											</case>
+											<case>
+												<collectFieldsByRegex src="$_msg">
+													<regex><![CDATA[The user <user:gPatStr> connected from <srcIpAddr:gPatIpAddr> but failed an authentication attempt due to the following\s+reason:\s*<reason:patStrDot>\.]]></regex>
+												</collectFieldsByRegex>
+											</case>
+											<case>
+												<collectFieldsByRegex src="$_msg">
+													<regex><![CDATA[The user <user:gPatStr> connected on port <appPort:gPatStr> on \S+ at \S+ AM and disconnected on \S+ at \S+ AM.\s*The user was active for <_min:gPatInt> minutes <_sec:gPatInt> seconds\.\s*<sentBytes:gPatInt> bytes were sent and <recvBytes:gPatInt> bytes were received. The reason for <reason:patStrDot>\.]]></regex>
+												</collectFieldsByRegex>
+												<setEventAttribute attr="_sec1">scale($_min, 60)</setEventAttribute>
+												<setEventAttribute attr="_sec">add($_sec1, $_sec)</setEventAttribute>
+												<setEventAttribute attr="durationMSec">scale($_sec, 1000)</setEventAttribute>
+											</case>
+											<case>
+												<collectFieldsByRegex src="$_msg">
+													<regex><![CDATA[The user <user:gPatStr> connected on port <appPort:gPatStr> has been assigned address <srcIpAddr:gPatIpAddr>]]></regex>
+												</collectFieldsByRegex>
+											</case>
+											<case>
+												<collectFieldsByRegex src="$_msg">
+													<regex><![CDATA[The user with ip address <srcIpAddr:gPatIpAddr> has disconnected]]></regex>
+												</collectFieldsByRegex>
+											</case>
+											<default/>
+										</switch>
+									</when>
+								</when>
+							</when>
+						</choose>
+					</when>
+				</choose>
+			</when>
+		</when>
+		<when test="exist winEventId">
+			<setEventAttribute attr="eventType">combineMsgId("Win-", $winEventId)</setEventAttribute>
+		</when>
+		<otherwise>
+			<setEventAttribute attr="eventType">Win-Generic</setEventAttribute>
+			<when test="exist errorString">
+				<!-- Some non windows agent messages need specific event types -->
+				<switch>
+					<case>
+						<collectFieldsByRegex src="$errorString">
+							<regex><![CDATA[^Failed to initialize '<type:patStrQuote>' monitoring of '<channel:patStrQuote>'\.]]></regex>
+						</collectFieldsByRegex>
+						<setEventAttribute attr="eventType">Win-Unable-To-Log-Channel</setEventAttribute>
+					</case>
+					<default/>
+				</switch>
+			</when>
+		</otherwise>
+	</choose>
+	<choose>
+		<when test="not_exist subtype">
+			<when test="exist _machineGUID">
+				<setEventAttribute attr="machineGUID">$_machineGUID</setEventAttribute>
+			</when>
+		</when>
+		<when test="$subtype = 'ForwardedEvents'">
+			<setEventAttribute attr="reptDevIpAddr">""</setEventAttribute>
+			<when test="exist computer">
+				<setEventAttribute attr="reptDevName">$computer</setEventAttribute>
+				<setEventAttribute attr="_ip">resolveDNSName($computer)</setEventAttribute>
+				<when test="exist _ip">
+					<setEventAttribute attr="reptDevIpAddr">$_ip</setEventAttribute>
+					<setEventAttribute attr="srcIpAddr">$_ip</setEventAttribute>
+					<setEventAttribute attr="srcName">$computer</setEventAttribute>
+					<setEventAttribute attr="destIpAddr">$_ip</setEventAttribute>
+					<setEventAttribute attr="destName">$computer</setEventAttribute>
+				</when>
+			</when>
+		</when>
+		<when test="exist _machineGUID">
+			<setEventAttribute attr="machineGUID">$_machineGUID</setEventAttribute>
+		</when>
+	</choose>
+	<choose>
+		<when test="not_exist type"/>
+		<when test="matches($type, 'Success')">
+			<setEventAttribute attr="eventAction">0</setEventAttribute>
+		</when>
+		<when test="matches($type, 'Failure|Failed')">
+			<setEventAttribute attr="eventAction">1</setEventAttribute>
+		</when>
+	</choose>
+	<choose>
+		<when test="not_exist winEventId"/>
+		<when test="$winEventId IN '517, 520, 560, 563, 576, 578, 592, 593, 608, 609, 610, 611, 612, 617, 618, 619, 620, 621, 622, 624, 625, 626, 627, 629, 630, 631, 632, 633, 634, 635, 636, 637, 638, 639, 640, 641, 642, 643, 644, 645, 646, 647, 648, 649, 650, 651, 652, 653, 654, 655, 656, 657, 658, 659, 660, 661, 662, 663, 664, 665, 666, 667, 668, 669, 670, 671, 684, 685, 686, 687, 688, 689, 690, 691, 692, 693, 694, 695, 696'">
+			<collectAndSetAttrFromAnotherEvent AnotherEventType="Win-Security-540 OR Win-Security-528">
+				<when test="exist winLogonId">
+					<when test="$winLogonId = $AnotherEvent.winLogonId">
+						<setEventAttribute attr="srcIpAddr">$AnotherEvent.srcIpAddr</setEventAttribute>
+					</when>
+				</when>
+			</collectAndSetAttrFromAnotherEvent>
+		</when>
+		<when test="$winEventId IN '562, 564, 567'">
+			<collectAndSetAttrFromAnotherEvent AnotherEventType="Win-Security-560">
+				<when test="$osObjHandleID = $AnotherEvent.osObjHandleID">
+					<setEventAttribute attr="srcIpAddr">$AnotherEvent.srcIpAddr</setEventAttribute>
+					<setEventAttribute attr="user">$AnotherEvent.user</setEventAttribute>
+					<setEventAttribute attr="domain">$AnotherEvent.domain</setEventAttribute>
+					<setEventAttribute attr="winLogonId">$AnotherEvent.winLogonId</setEventAttribute>
+					<setEventAttribute attr="osObjName">$AnotherEvent.osObjName</setEventAttribute>
+				</when>
+			</collectAndSetAttrFromAnotherEvent>
+		</when>
+		<when test="$winEventId = '4611'">
+			<when test="exist winLogonProc">
+				<setEventAttribute attr="procName">$winLogonProc</setEventAttribute>
+			</when>
+		</when>
+		<!-- FIX-3: Removed 4698-4702 from this IN list. They were shadowing the TaskContent
+	 parsing block below, preventing commandLine/args/serviceAccount extraction.
+	 Stock parser does not include 4698-4702 in this correlation block. -->
+		<when test="$winEventId IN '4672, 4720, 4722, 4723, 4724, 4725, 4726, 4731, 4744, 4727, 4754, 4759, 4749, 4735, 4737, 4755, 4745, 4750, 4760, 4739, 4742, 4743, 4746, 4751, 4761, 4728, 4732, 4756, 4785, 4787, 4747, 4752, 4762, 4729, 4733, 4757, 4786, 4788, 4783, 4784, 4789, 4763, 4748, 4753, 4734, 4758, 4730'">
+			<collectAndSetAttrFromAnotherEvent AnotherEventType="Win-Security-4624">
+				<when test="exist winLogonId">
+					<when test="$winLogonId = $AnotherEvent.winLogonId">
+						<setEventAttribute attr="srcIpAddr">$AnotherEvent.srcIpAddr</setEventAttribute>
+					</when>
+				</when>
+			</collectAndSetAttrFromAnotherEvent>
+		</when>
+		<when test="$winEventId IN '4698,4699,4700,4701,4702'">
+			<!-- details stores the nested task xml for details about the task creation event -->
+			<when test="exist taskContent">
+				<collectFieldsByXPath src="$taskContent">
+					<attrKeyMap attr="permissionLevelName" key="/Task/Principals/Principal/RunLevel"/>
+					<attrKeyMap attr="commandLine" key="/Task/Actions/Exec/Command"/>
+					<attrKeyMap attr="_args" key="/Task/Actions/Exec/Arguments"/>
+					<attrKeyMap attr="dirName" key="/Task/Actions/Exec/WorkingDirectory"/>
+					<attrKeyMap attr="_taskUserId" key="/Task/Principals/Principal/UserId"/>
+					<when test="exist _taskUserId">
+						<setEventAttribute attr="serviceAccount">$_taskUserId</setEventAttribute>
+					</when>
+				</collectFieldsByXPath>
+				<choose>
+					<when test="not_exist commandLine"/>
+					<when test="not_exist _args"/>
+					<otherwise>
+						<setEventAttribute attr="commandLine">combineMsgId($commandLine," ", $_args)</setEventAttribute>
+					</otherwise>
+				</choose>
+			</when>
+		</when>
+		<when test="$winEventId = '4740'">
+			<when test="exist targetDomain">
+				<setEventAttribute attr="_srcAddr">$targetDomain</setEventAttribute>
+			</when>
+		</when>
+		<when test="$winEventId = '4741'">
+			<collectAndSetAttrFromAnotherEvent AnotherEventType="Win-Security-4624">
+				<when test="exist winLogonId">
+					<when test="$winLogonId = $AnotherEvent.winLogonId">
+						<setEventAttribute attr="srcIpAddr">$AnotherEvent.srcIpAddr</setEventAttribute>
+					</when>
+				</when>
+			</collectAndSetAttrFromAnotherEvent>
+			<when test="exist _oldUacValue">
+				<setEventAttribute attr="oldValue">$_oldUacValue</setEventAttribute>
+				<setEventAttribute attr="oldValueType">uac</setEventAttribute>
+			</when>
+			<when test="exist _newUacValue">
+				<setEventAttribute attr="newValue">$_newUacValue</setEventAttribute>
+				<setEventAttribute attr="newValueType">uac</setEventAttribute>
+			</when>
+			<!-- Check if account expires is set, if so eventually convert to date object expiredDate -->
+			<choose>
+				<when test="not_exist _accountExpires"/>
+				<!-- 1794 means means it never expires, skip setting expire date -->
+				<when test="$_accountExpires = '%%1794'"/>
+				<otherwise>
+					<!-- TODO: convert FILETIME time object to epoch seconds -->
+					<!-- <setEventAttribute attr="expiredDate">$_accountExpires</setEventAttribute> -->
+				</otherwise>
+			</choose>
+		</when>
+		<when test="$winEventId = '4738'">
+			<!-- Several rules rely on user/target user combo for change monitoring -->
+			<when test="exist _subjectUserName">
+				<setEventAttribute attr="user">$_subjectUserName</setEventAttribute>
+			</when>
+			<when test="exist _targetUserName">
+				<setEventAttribute attr="targetUser">$_targetUserName</setEventAttribute>
+			</when>
+		</when>
+		<when test="$winEventId = '4776'">
+			<when test="exist _targetUserName">
+				<setEventAttribute attr="user">$_targetUserName</setEventAttribute>
+			</when>
+			<when test="exist _targetUserDomain">
+				<setEventAttribute attr="domain">$_targetUserDomain</setEventAttribute>
+			</when>
+			<!-- FIX-2b: Was 'winKerbFailCode' (never defined). Stock uses 'status' → ALI renamed to errorCode. -->
+			<when test="exist errorCode">
+				<setEventAttribute attr="winLogonFailCode2">$errorCode</setEventAttribute>
+			</when>
+		</when>
+		<when test="$winEventId IN '5140,5145'">
+			<when test="exist _ipAddr">
+				<setEventAttribute attr="srcIpAddr">$_ipAddr</setEventAttribute>
+			</when>
+			<when test="exist _ipPort">
+				<setEventAttribute attr="srcIpPort">$_ipPort</setEventAttribute>
+			</when>
+		</when>
+		<when test="$winEventId = '7036'">
+			<when test="exist _param1">
+				<setEventAttribute attr="procName">$_param1</setEventAttribute>
+			</when>
+			<when test="exist _param2">
+				<setEventAttribute attr="status">$_param2</setEventAttribute>
+			</when>
+			<choose>
+				<when test="not_exist status"/>
+				<when test="$status = 'running'">
+					<setEventAttribute attr="eventType">combineMsgId($eventType, "-Start")</setEventAttribute>
+				</when>
+				<when test="$status = 'stop'">
+					<setEventAttribute attr="eventType">combineMsgId($eventType, "-Stop")</setEventAttribute>
+				</when>
+				<otherwise/>
+			</choose>
+		</when>
+		<when test="$winEventId = '7040'">
+			<setEventAttribute attr="msg">7040-TEST</setEventAttribute>
+			<when test="exist _param1">
+				<setEventAttribute attr="serviceName">$_param1</setEventAttribute>
+			</when>
+			<when test="exist _param2">
+				<setEventAttribute attr="oldServiceStartType">$_param2</setEventAttribute>
+			</when>
+			<when test="exist _param3">
+				<setEventAttribute attr="serviceStartType">$_param3</setEventAttribute>
+			</when>
+			<when test="exist _param4">
+				<setEventAttribute attr="procName">$_param4</setEventAttribute>
+			</when>
+		</when>
+	</choose>
+	<choose>
+		<when test="not_exist _targetSid"/>
+		<when test="$winEventId IN '4746, 4751, 4761, 4728, 4732, 4756, 4785, 4787'">
+			<setEventAttribute attr="groupID">$_targetSid</setEventAttribute>
+			<when test="exist _memberName">
+				<setEventAttribute attr="_targetUser">$_memberName</setEventAttribute>
+			</when>
+		</when>
+		<when test="not_exist securityId">
+			<setEventAttribute attr="securityId">$_targetSid</setEventAttribute>
+		</when>
+	</choose>
+	<choose>
+		<when test="not_exist _severity"/>
+		<!-- Verbose or not set: 1 -->
+		<when test="$_severity = 'Information'">
+			<setEventAttribute attr="eventSeverity">3</setEventAttribute>
+		</when>
+		<when test="$_severity = 'Warning'">
+			<setEventAttribute attr="eventSeverity">5</setEventAttribute>
+		</when>
+		<when test="$_severity = 'Error'">
+			<setEventAttribute attr="eventSeverity">7</setEventAttribute>
+		</when>
+		<when test="$_severity = 'Critical'">
+			<setEventAttribute attr="eventSeverity">9</setEventAttribute>
+		</when>
+	</choose>
+	<choose>
+		<when test="exist procName">
+			<setEventAttribute attr="swProcName">$procName</setEventAttribute>
+			<when test="not exist appName">
+				<setEventAttribute attr="appName">$procName</setEventAttribute>
+			</when>
+		</when>
+		<when test="exist appName">
+			<setEventAttribute attr="procName">$appName</setEventAttribute>
+		</when>
+	</choose>
+	<when test="exist srcName">
+		<switch>
+			<case>
+				<collectAndSetAttrByRegex src="$srcName">
+					<regex><![CDATA[IP-<_s1:gPatInt>-<_s2:gPatInt>-<_s3:gPatInt>-<_s4:gPatInt>]]></regex>
+				</collectAndSetAttrByRegex>
+				<setEventAttribute attr="srcIpAddr">combineMsgId($_s1, ".", $_s2, ".", $_s3, ".", $_s4)</setEventAttribute>
+			</case>
+			<default>
+				<setEventAttribute attr="srcName">replaceStrInStr($srcName, "\\", "")</setEventAttribute>
+			</default>
+		</switch>
+	</when>
+	<when test="exist user">
+		<when test="matches($user, '@')">
+			<collectFieldsByRegex src="$user">
+				<regex><![CDATA[<user:patStrAt>@]]></regex>
+			</collectFieldsByRegex>
+		</when>
+		<switch>
+			<case>
+				<collectFieldsByRegex src="$user">
+					<regex><![CDATA[^<_domain:gPatMesgBodyMin>[\\]+<user:gPatMesgBodyMin>$]]></regex>
+				</collectFieldsByRegex>
+				<when test="not_exist domain">
+					<when test="exist _domain">
+						<setEventAttribute attr="domain">$_domain</setEventAttribute>
+					</when>
+				</when>
+			</case>
+			<default/>
+		</switch>
+	</when>
+	<when test="exist _targetUser">
+		<when test="not_exist targetUser">
+			<switch>
+				<case>
+					<!-- CN=Lastname\, Firstname,OU=EMPLOYEES,DC=com -->
+					<collectFieldsByRegex src="$_targetUser">
+						<regex><![CDATA[[cC][nN]=<_lastname:gPatStrComma>[\\],\s+<_firstname:gPatStrComma>]]></regex>
+					</collectFieldsByRegex>
+					<setEventAttribute attr="targetUser">combineMsgId($_firstname, " ", $_lastname)</setEventAttribute>
+				</case>
+				<case>
+					<collectFieldsByRegex src="$_targetUser">
+						<regex><![CDATA[[cC][nN]=<targetUser:gPatStrComma>,<:gPatMesgBody>]]></regex>
+					</collectFieldsByRegex>
+				</case>
+				<default>
+					<setEventAttribute attr="targetUser">$_targetUser</setEventAttribute>
+				</default>
+			</switch>
+		</when>
+	</when>
+	<when test="exist targetUser">
+		<when test="matches($targetUser, '@')">
+			<collectFieldsByRegex src="$targetUser">
+				<regex><![CDATA[<targetUser:patStrAt>@]]></regex>
+			</collectFieldsByRegex>
+		</when>
+		<when test="matches($targetUser, '\\')">
+			<collectFieldsByRegex src="$targetUser">
+				<regex><![CDATA[[\\]<targetUser:gPatStr>]]></regex>
+			</collectFieldsByRegex>
+		</when>
+	</when>
+	<when test="exist targetUserGrp">
+		<when test="matches($targetUserGrp, '\$')">
+			<collectFieldsByRegex src="$targetUserGrp">
+				<regex><![CDATA[<targetUserGrp:patStrDollar>\$]]></regex>
+			</collectFieldsByRegex>
+		</when>
+	</when>
+	<when test="exist targetDomain">
+		<when test="exist hostName">
+			<setEventAttribute attr="_hostName">toLower($hostName)</setEventAttribute>
+			<setEventAttribute attr="_targetDomain">toLower($targetDomain)</setEventAttribute>
+			<setEventAttribute attr="_hostDomain">extractHostFromFQDN($_hostName)</setEventAttribute>
+			<when test="$_targetDomain = $_hostDomain">
+				<setEventAttribute attr="isLocalUser">Yes</setEventAttribute>
+			</when>
+		</when>
+	</when>
+	<when test="exist osObjAccessType">
+		<setEventAttribute attr="osObjAccessType">trimAttribute($osObjAccessType, ",")</setEventAttribute>
+	</when>
+	<when test="not_exist filePath">
+		<when test="exist fileName">
+			<collectFieldsByRegex src="$fileName">
+				<regex><![CDATA[^(?:<filePath:gPatMesgBody>\\)?<fileName:gPatMesgBodyMin>\s*$]]></regex>
+			</collectFieldsByRegex>
+		</when>
+	</when>
+	<when test="$winEventId IN '4768, 4769, 4776'">
+		<choose>
+			<when test="not_exist errorCode">
+				<setEventAttribute attr="eventType">combineMsgId($eventType, "-success")</setEventAttribute>
+			</when>
+			<when test="$errorCode IN '-, 0x0'">
+				<setEventAttribute attr="eventType">combineMsgId($eventType, "-success")</setEventAttribute>
+			</when>
+			<otherwise>
+				<setEventAttribute attr="eventType">combineMsgId($eventType, "-failure")</setEventAttribute>
+			</otherwise>
+		</choose>
+	</when>
+	<choose>
+		<when test="not_exist _srcId"/>
+		<when test="matches($_srcId, 'local machine')">
+			<setEventAttribute attr="srcIpAddr">$reptDevIpAddr</setEventAttribute>
+		</when>
+		<otherwise>
+			<setEventAttribute attr="_srcAddr">$_srcId</setEventAttribute>
+		</otherwise>
+	</choose>
+	<when test="exist _srcAddr">
+		<when test="not_exist srcIpAddr">
+			<switch>
+				<case>
+					<collectFieldsByRegex src="$_srcAddr">
+						<regex><![CDATA[^<srcIpAddr:gPatIpAddr>$]]></regex>
+					</collectFieldsByRegex>
+				</case>
+				<default>
+					<setEventAttribute attr="srcName">$_srcAddr</setEventAttribute>
+				</default>
+			</switch>
+		</when>
+	</when>
+	<when test="exist _proto">
+		<setEventAttribute attr="ipProto">convertStrToIntIpProto($_proto)</setEventAttribute>
+	</when>
+	<when test="exist osObjType">
+		<when test="exist targetName">
+			<when test="$osObjType = 'File'">
+				<setEventAttribute attr="destFileName">$targetName</setEventAttribute>
+			</when>
+		</when>
+	</when>
+	<when test="exist srcIpPort">
+		<setEventAttribute attr="srcIpPort">replaceStrInStr($srcIpPort, ",", "")</setEventAttribute>
+	</when>
+	<when test="exist subStatus">
+		<setEventAttribute attr="_subStatus">toUpper($subStatus)</setEventAttribute>
+		<collectFieldsByCsvFile file="/opt/phoenix/data-definition/eventAttrDesc/winLogonFailCode2.csv" key="$_subStatus" reloadInterval="3600">
+			<attrKeyMap attr="errReason" column="1"/>
+		</collectFieldsByCsvFile>
+	</when>
+	<!-- 4776 events have Status which is mapped to this attrib, 4625 has both Status and SubStatus -->
+	<when test="exist winLogonFailCode2">
+		<setEventAttribute attr="winLogonFailCode2">toUpper($winLogonFailCode2)</setEventAttribute>
+		<collectFieldsByCsvFile file="/opt/phoenix/data-definition/eventAttrDesc/winLogonFailCode2.csv" key="$winLogonFailCode2" reloadInterval="3600">
+			<attrKeyMap attr="errReason" column="1"/>
+		</collectFieldsByCsvFile>
+	</when>
+	<when test="exist winEventId">
+		<when test="$activityType = 'Security'">
+			<collectFieldsByCsvFile file="/opt/phoenix/data-definition/WindowsAuditCategories.csv" key="$winEventId" reloadInterval="3600">
+				<attrKeyMap attr="winEvtCategory" column="1"/>
+				<attrKeyMap attr="winEvtSubCategory" column="2"/>
+			</collectFieldsByCsvFile>
+		</when>
+	</when>
+	<when test="exist encryptAlgo">
+		<setEventAttribute attr="_encryptAlgo">toLower($encryptAlgo)</setEventAttribute>
+		<collectFieldsByCsvFile file="/opt/phoenix/data-definition/WindowsEncryptionTypes.csv" key="$_encryptAlgo" reloadInterval="3600">
+			<attrKeyMap attr="encryptAlgoName" column="1"/>
+			<attrKeyMap attr="description" column="2"/>
+		</collectFieldsByCsvFile>
+	</when>
+	<collectFieldsByCsvValue delimiter="\n" file="/opt/phoenix/data-definition/WindowsServerMessageTable.csv" pattern="^%%\d+$" reloadInterval="3600">
+		<attrKeyMap attr="appCategory"/>
+		<attrKeyMap attr="appSubcategory"/>
+		<attrKeyMap attr="accessMask"/>
+		<attrKeyMap attr="layerName"/>
+		<attrKeyMap attr="osObjAccessType"/>
+		<attrKeyMap attr="permissionLevelID"/>
+		<attrKeyMap attr="propName"/>
+		<attrKeyMap attr="userAcctControl"/>
+		<attrKeyMap attr="opName"/>
+		<attrKeyMap attr="logonHours"/>
+		<attrKeyMap attr="keyType"/>
+		<attrKeyMap attr="tokenType"/>
+		<attrKeyMap attr="direction"/>
+	</collectFieldsByCsvValue>
+	<collectFieldsByCsvValue delimiter=", " file="/opt/phoenix/data-definition/WindowsServerMessageTable.csv" pattern="^%%\d+$">
+		<attrKeyMap attr="actionName"/>
+	</collectFieldsByCsvValue>
+</parsingInstructions>

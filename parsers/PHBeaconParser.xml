@@ -1,0 +1,91 @@
+<patternDefinitions>
+    <pattern name="patStrEndWithLeftSquareBracket"><![CDATA[[^\[]*]]></pattern>
+    <pattern name="patStrEndWithRightSquareBracket"><![CDATA[[^\]]*]]></pattern>
+  </patternDefinitions>
+<eventFormatRecognizer><![CDATA[<:gPatSyslogPRI><:gPatMon>\s+<:gPatDay>\s+<:gPatTime>\s+<:gPatIpAddr>\s+<:gPatHostName>\s+\[PH_BEACON_\w+\]:\s]]></eventFormatRecognizer>
+<parsingInstructions>
+    <collectFieldsByRegex src="$_rawmsg">
+      <regex><![CDATA[<:gPatSyslogPRI><_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>\s+<reptDevIpAddr:gPatIpAddr>\s+<reptDevName:gPatHostName>\s+\[<eventType:gPatWord>\]:\s+<_body:gPatMesgBody>]]></regex>
+    </collectFieldsByRegex>
+
+    <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_time)</setEventAttribute>
+
+    <collectAndSetAttrByKeyValuePair sep=",[" src="$_body">
+      <attrKeyMap attr="dropLicenseEventRatio" key="[AVG(dropLicenseEventRatio)]="/>
+      <attrKeyMap attr="dropPolicyEventsPerSec" key="[AVG(dropPolicyEventsPerSec)]="/>
+      <attrKeyMap attr="fwdEventsPerSec" key="[AVG(fwdEventsPerSec)]="/>
+      <attrKeyMap attr="incomingEventsPerSec" key="[AVG(incomingEventsPerSec)]="/>
+      <attrKeyMap attr="count" key="[COUNT(*)]="/>
+      <attrKeyMap attr="count" key="[count]="/>
+      <attrKeyMap attr="customer" key="[customer]="/>
+      <attrKeyMap attr="errReason" key="[errReason]="/>
+      <attrKeyMap attr="_eventSeverity" key="[eventSeverity]="/>
+      <attrKeyMap attr="eventSeverityCat" key="[eventSeverityCat]="/>
+      <attrKeyMap attr="compEventType" key="[eventType]="/>
+      <attrKeyMap attr="jobDesc" key="[jobDesc]="/>
+      <attrKeyMap attr="jobDetail" key="[jobDetail]="/>
+      <attrKeyMap attr="jobName" key="[jobName]="/>
+      <attrKeyMap attr="jobStatus" key="[jobStatus]="/>
+      <attrKeyMap attr="_msg" key="[msg]="/>
+      <attrKeyMap attr="hostIpAddr" key="[ph_device.access_ip]="/>
+      <attrKeyMap attr="hostName" key="[ph_device_name]="/>
+      <attrKeyMap attr="reptModel" key="[ph_device_type.model]="/>
+      <attrKeyMap attr="reptVendor" key="[ph_device_type.vendor]="/>
+      <attrKeyMap attr="osVersion" key="[ph_device.version]="/>
+      <attrKeyMap attr="appTransportProto" key="[ph_mon_perf_obj.method]="/>
+      <attrKeyMap attr="jobStatusType" key="[ph_monitor_config.status]="/>
+      <attrKeyMap attr="jobName" key="[ph_monitor_type.displayname]="/>
+      <attrKeyMap attr="customer" key="[ph_sys_domain.name]="/>
+      <attrKeyMap attr="phCollectorName" key="[phCollectorName]="/>
+      <attrKeyMap attr="phCustId" key="[phCustId]="/>
+      <attrKeyMap attr="phCustId" key="[ph_sys_domain.domain_id]="/>
+      <attrKeyMap attr="phDiscovFailCode" key="[phDiscovFailCode]="/>
+      <attrKeyMap attr="phEventCategory" key="[phEventCategory]="/>
+      <attrKeyMap attr="procName" key="[procName]="/>
+      <attrKeyMap attr="ruleId" key="[ruleId]="/>
+      <attrKeyMap attr="ruleName" key="[ruleName]="/>
+      <attrKeyMap attr="dropLicenseEvents" key="[SUM(dropLicenseEvents)]="/>
+    </collectAndSetAttrByKeyValuePair>
+
+    <choose>
+      <when test="exist eventSeverityCat">
+        <choose>
+          <when test="$eventSeverityCat = 'HIGH'">
+            <setEventAttribute attr="eventSeverity">9</setEventAttribute>
+          </when>
+          <when test="$eventSeverityCat = 'LOW'">
+            <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+          </when>
+          <otherwise>
+            <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+          </otherwise>
+        </choose>
+      </when>
+
+      <when test="not_exist _eventSeverity">
+        <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+      </when>
+
+      <when test="$_eventSeverity IN 'PHL_ALERT, PHL_CRITICAL'">
+        <setEventAttribute attr="eventSeverity">9</setEventAttribute>
+      </when>
+
+      <when test="$_eventSeverity IN 'PHL_ERROR, PHL_WARNING'">
+        <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+      </when>
+
+      <otherwise>
+        <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+      </otherwise>
+    </choose>
+
+    <when test="exist _msg">
+      <setEventAttribute attr="_eventType">$eventType</setEventAttribute>
+      <collectAndSetAttrByXPath src="$_msg" xpath="//event[@name]/*">
+        <excludeAttr>phEventCategory</excludeAttr>
+      </collectAndSetAttrByXPath>
+      <setEventAttribute attr="compEventType">$eventType</setEventAttribute>
+      <setEventAttribute attr="eventType">$_eventType</setEventAttribute>
+    </when>
+  </parsingInstructions>
+

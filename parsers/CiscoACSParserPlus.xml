@@ -1,0 +1,141 @@
+<eventFormatRecognizer><![CDATA[CSCOacs_]]></eventFormatRecognizer>
+<parsingInstructions>
+    <!-- parsing common fields -->
+    <switch>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>?<_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime> <_rept:gPatStr> <eventType:gPatStr>\s+<sessionId:gPatStr>\s+<:gPatStr>\s+<_logtype:gPatInt>\s+<_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+        <switch>
+          <case>
+            <collectFieldsByRegex src="$_rept">
+              <regex><![CDATA[<reptDevIpAddr:gPatIpAddr>]]></regex>
+            </collectFieldsByRegex>
+          </case>
+          <default>
+            <setEventAttribute attr="reptDevName">$_rept</setEventAttribute>
+          </default>
+        </switch>
+        <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_time)</setEventAttribute>
+      </case>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatStr>\s+<:gPatStr>\s+<:gPatStr>\s+<:gPatStr>\s+<_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+      </case>
+    </switch>
+
+    <setEventAttribute attr="eventAction">0</setEventAttribute>
+    <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+
+    <!-- message specific parsing
+	 <181>Jan  6 19:56:00 vmacs10 CSCOacs_Passed_Authentications 0000000009 3 1  Step=15035 , Step=15042 , Step=15036 , Step=15004 , Step=13015 , SelectedAuthenticationIdentityStores=AD1, NetworkDeviceGroups=Device Type:All Device Types, NetworkDeviceGroups=Location:All Locations:Hovedkontor, ServiceSelectionMatchedRule=Rule-2, IdentityPolicyMatchedRule=Default, ADDomain=ABC.ABC, GroupMappingPolicyMatchedRule=Rule-1, AuthorizationPolicyMatchedRule=Rule-1, Action=Login, Privilege-Level=1, Authen-Type=ASCII, Service=Login, Remote-Address=172.24.220.228, IdentityAccessRestricted=false, ExternalGroups=abc.abc/Ressurser/Administrative Grupper/CTX-PRODUsers GG, ExternalGroups=abc.abc/Ressurser/Administrative Grupper/AD-NettverksAdministrator GG, ExternalGroups=abc.abc/Users/Domain Admins, ExternalGroups=abc.abc/Users/Domain Users, ExternalGroups=abc.abc/Users/Denied RODC Password Replication Group, ExternalGroups=abc.abc/Ressurser/Administrative Grupper/WTS-AL-Shadow GG,
+    -->
+    <!--
+	 <181>May 16 08:14:44 dotacs12 CSCOacs_Failed_Attempts 0001575584 3 0 2012-05-16 08:14:44.948 -05:00 0025621668 5400 NOTICE Failed-Attempt: Authentication failed, ACSVersion=acs-5.3.0.40-B.839, ConfigVersionId=21, Device IP Address=10.16.206.195, Device Port=1645, RadiusPacketType=AccessRequest, UserName=user123@abc.com, Protocol=Radius, RequestLatency=11, NetworkDeviceName=SITE-10-0503-AP, User-Name=user123@abc.com, NAS-IP-Address=10.16.206.195, NAS-Port=388, Service-Type=Login, Framed-MTU=1400, State=36SessionID=dotacs12/126121712/1426691\;, Called-Station-ID=003a.98be.f680, Calling-Station-ID=183d.a201.8738, NAS-Identifier=SITE-10-0503-AP1, NAS-Port-Type=Wireless - IEEE 802.11, NAS-Port-Id=388, AcsSessionID=dotacs12/126121712/1426691, AuthenticationMethod=x509_PKI, SelectedAccessService=RADIUS, FailureReason=22045 , Step=11001 , Step=11017 , Step=15008 , Step=15004 , Step=15012 , Step=11507 , Step=12500 , Step=11006 , Step=11001 , Step=11018 , Step=12502 , Step=12800 , Step=12805 ,
+    -->
+    <!--
+	 <181>May 16 08:18:13 dotacs12 CSCOacs_Passed_Authentications 0001575987 3 0 2012-05-16 08:18:13.572 -05:00 0025628800 5201 NOTICE Passed-Authentication: Authentication succeeded, ACSVersion=acs-5.3.0.40-B.839, ConfigVersionId=21, Device IP Address=10.15.1.248, UserName=abc, Protocol=Tacacs, RequestLatency=13, NetworkDeviceName=Default Network Device, Type=Authentication, Action=Login, Privilege-Level=1, Authen-Type=ASCII, Service=Login, User=joeUser, Port=tty1, Remote-Address=10.16.13.251, UserName=joeUser, AcsSessionID=dotacs12/126121712/1427032, AuthenticationIdentityStore=Internal Users, AuthenticationMethod=PAP_ASCII, SelectedAccessService=TACACS Administration, SelectedShellProfile=NetworkAdmins, IdentityGroup=IdentityGroup:All Groups:Network Administrators, Step=13020 , Step=13013 , Step=15008 , Step=15004 , Step=15012 , Step=15041 , Step=15004 , Step=15013 , Step=24210 , Step=24212 , Step=13045 , Step=13015 , Step=13020 , Step=13014 , Step=15037 , Step=15041 , Step=15004 , Step=15013 ,
+    -->
+
+    <collectAndSetAttrByKeyValuePairMultiValue sep="," src="$_body">
+      <attrKeyMap attr="_step" key="Step="/>
+      <attrKeyMap attr="_deviceadmin" key="Device-Administration: "/>
+      <!-- added for ESA -->
+      <attrKeyMap attr="_tacacsaccounting" key="Tacacs-Accounting: "/>
+      <!-- added for Mega -->
+      <attrKeyMap attr="relayDevIpAddr" key="Device IP Address="/>
+      <!-- who authenticated the request, i.e. NAS IP -->
+      <attrKeyMap attr="relayDevName" key="NetworkDeviceName="/>
+      <attrKeyMap attr="nepDevIpAddr" key="NAS-IP-Address="/>
+      <!-- added for ESA -->
+      <attrKeyMap attr="_identity" key="SelectedAuthenticationIdentityStores="/>
+      <attrKeyMap attr="_netDevGrp" key="NetworkDeviceGroups="/>
+      <attrKeyMap attr="_srvRule" key="ServiceSelectionMatchedRule="/>
+      <attrKeyMap attr="_idyRule" key="IdentityPolicyMatchedRule="/>
+      <attrKeyMap attr="domain" key="ADDomain="/>
+      <attrKeyMap attr="_grpRule" key="GroupMappingPolicyMatchedRule="/>
+      <attrKeyMap attr="_authRule" key="AuthorizationPolicyMatchedRule="/>
+      <attrKeyMap attr="_action" key="Action="/>
+      <attrKeyMap attr="_priLevel" key="Privilege-Level="/>
+      <attrKeyMap attr="_authType" key="Authen-Type="/>
+      <attrKeyMap attr="authenMethod" key="AuthenticationMethod="/>
+      <!-- CD Change -->
+      <attrKeyMap attr="_service" key="Service="/>
+      <attrKeyMap attr="srcIpAddr" key="Calling-Station-ID="/>
+      <!-- added for ESA -->
+      <attrKeyMap attr="radiusAcctStatus" key="Acct-Status-Type="/>
+      <attrKeyMap attr="_idyAccessResticted" key="IdentityAccessRestricted="/>
+      <attrKeyMap attr="_extGroups" key="ExternalGroups="/>
+      <attrKeyMap attr="_command" key="CmdAV="/>
+    </collectAndSetAttrByKeyValuePairMultiValue>
+
+    <collectAndSetAttrByKeyValuePair sep="," src="$_body">
+      <attrKeyMap attr="user" key="Real Name="/>
+      <attrKeyMap attr="user" key="User-Name="/>
+      <attrKeyMap attr="user" key="UserName="/>
+      <attrKeyMap attr="srcIpAddr" key="Remote-Address="/>
+      <!-- CD Change -->
+    </collectAndSetAttrByKeyValuePair>
+
+    <when test="$eventType IN 'CSCOacs_Passed_Authentications, CSCOacs_TACACS_Accounting'">
+      <collectAndSetAttrByKeyValuePair sep="," src="$_body">
+        <attrKeyMap attr="user" key="User="/>
+      </collectAndSetAttrByKeyValuePair>
+    </when>
+
+    <choose>
+      <when test="$_logtype = '1'">
+        <setEventAttribute attr="eventType">combineMsgId($eventType, "_Info")</setEventAttribute>
+      </when>
+
+      <when test="$_logtype = '0'">
+        <when test="exist _deviceadmin">
+          <choose>
+            <when test="$_deviceadmin = 'Authorization failed'">
+              <setEventAttribute attr="eventType">CSCOacs_Authorization_Failed</setEventAttribute>
+            </when>
+            <when test="$_deviceadmin IN 'Command Authorization succeeded, Session Authorization succeeded'">
+              <setEventAttribute attr="eventType">CSCOacs_Command_Authorization_Succeeded</setEventAttribute>
+            </when>
+            <when test="$_deviceadmin = 'Command Authorization failed'">
+              <setEventAttribute attr="eventType">CSCOacs_Command_Authorization_Failed</setEventAttribute>
+            </when>
+          </choose>
+        </when>
+      </when>
+    </choose>
+
+    <when test="exist _tacacsaccounting">
+      <choose>
+        <when test="$_tacacsaccounting = 'TACACS+ Accounting STOP'">
+          <setEventAttribute attr="eventType">CSCOacs_TACACS_Accounting_STOP</setEventAttribute>
+        </when>
+        <when test="$_tacacsaccounting = 'TACACS+ Accounting with Command'">
+          <setEventAttribute attr="eventType">CSCOacs_TACACS_Accounting_Command</setEventAttribute>
+          <when test="exist srcIpAddr">
+            <collectAndSetAttrByKeyValuePair sep="," src="$_body">
+              <attrKeyMap attr="user" key="User="/>
+            </collectAndSetAttrByKeyValuePair>
+          </when>
+        </when>
+        <when test="$_tacacsaccounting = 'TACACS+ Accounting START'">
+          <setEventAttribute attr="eventType">CSCOacs_TACACS_Accounting_START</setEventAttribute>
+        </when>
+      </choose>
+    </when>
+
+    <when test="exist _command">
+      <setEventAttribute attr="command">replaceStrInStr($_command, "CmdArgAV=", "")</setEventAttribute>
+      <setEventAttribute attr="command">trimAttribute($command, "]")</setEventAttribute>
+      <switch>
+        <case>
+          <collectFieldsByRegex src="$command">
+            <regex><![CDATA[<command:gPatMesgBody>\s+\<cr\>]]></regex>
+          </collectFieldsByRegex>
+        </case>
+        <default/>
+      </switch>
+    </when>
+  </parsingInstructions>
+

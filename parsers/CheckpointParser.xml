@@ -1,0 +1,363 @@
+<patternDefinitions>
+    <pattern name="patMesg"><![CDATA[[^\[]+]]></pattern>
+  </patternDefinitions>
+<eventFormatRecognizer><![CDATA[\[CHECKPOINT\]]]></eventFormatRecognizer>
+<parsingInstructions>
+
+    <collectAndSetAttrByKeyValuePair sep="," src="$_rawmsg">
+      <attrKeyMap attr="srcIpAddr" key="[src]="/>
+      <attrKeyMap attr="srcIpPort" key="[s_port]="/>
+      <attrKeyMap attr="postNATSrcIpAddr" key="[xlatesrc]="/>
+      <attrKeyMap attr="postNATSrcIpPort" key="[xlatesport]="/>
+      <attrKeyMap attr="_proto" key="[proto]="/>
+      <attrKeyMap attr="_destIpAddr" key="[dst]="/>
+      <attrKeyMap attr="_destIpAddr2" key="[xlatedst]="/>
+      <attrKeyMap attr="destIpPort" key="[service]="/>
+      <attrKeyMap attr="icmpType" key="[icmp-type]="/>
+      <attrKeyMap attr="icmpType" key="[ICMP Type]="/>
+      <attrKeyMap attr="icmpCode" key="[icmp-code]="/>
+      <attrKeyMap attr="icmpCode" key="[ICMP Code]="/>
+      <attrKeyMap attr="_eventAction" key="[action]="/>
+      <!---<attrKeyMap attr="aclRuleId" key="[rule]="/> -->
+      <attrKeyMap attr="reptDevIpAddr" key="[orig]="/>
+      <attrKeyMap attr="hostName" key="[orig_name]="/>
+      <attrKeyMap attr="relayDevName" key="[mgmt]="/>
+      <attrKeyMap attr="srcIntfName" key="[if_Name]="/>
+      <attrKeyMap attr="_deviceTime" key="[time]="/>
+      <attrKeyMap attr="attackName" key="[attack]="/>
+      <attrKeyMap attr="attackInfo" key="[Attack Info]="/>
+      <attrKeyMap attr="ipsProtectionName" key="[Protection Name]="/>
+      <attrKeyMap attr="ipsSmartDefenseProfile" key="[SmartDefense Profile]="/>
+      <attrKeyMap attr="totBytes64" key="[bytes]="/>
+      <attrKeyMap attr="totPkts64" key="[packets]="/>
+      <attrKeyMap attr="durationMSec" key="[elapsed]="/>
+      <attrKeyMap attr="destName" key="[dns_query]="/>
+      <attrKeyMap attr="_dnsType" key="[dns_type]="/>
+      <attrKeyMap attr="relayDevIpAddr" key="[orig_mgmt_ip]="/>
+      <attrKeyMap attr="direction" key="[i/f_dir]="/>
+      <attrKeyMap attr="fwAction" key="[Internal_CA:]="/>
+      <attrKeyMap attr="_operation" key="[Operation]="/>
+      <attrKeyMap attr="user" key="[Administrator]="/>
+      <attrKeyMap attr="srcName" key="[Machine]="/>
+      <attrKeyMap attr="_subject" key="[Subject]="/>
+      <attrKeyMap attr="osObjName" key="[ObjectName]="/>
+      <attrKeyMap attr="osObjType" key="[ObjectType]="/>
+      <attrKeyMap attr="_objTable" key="[ObjectTable]="/>
+      <attrKeyMap attr="fileName" key="[filename]="/>
+      <attrKeyMap attr="srcIpAddr" key="[client_ip]="/>
+      <attrKeyMap attr="_auditStatus" key="[Audit Status]="/>
+      <attrKeyMap attr="_info2" key="[Additional Info]="/>
+      <attrKeyMap attr="_info3" key="[FieldsChanges]="/>
+      <attrKeyMap attr="_ipsSev" key="[Severity]="/>
+      <attrKeyMap attr="_ipsConfidence" key="[Confidence Level]="/>
+      <attrKeyMap attr="_ipsPerfImpact" key="[Performance Impact]="/>
+      <attrKeyMap attr="vulnCVEId" key="[Industry Reference]="/>
+      <attrKeyMap attr="managedEntity" key="[entity]="/>
+      <attrKeyMap attr="authenMethod" key="[auth_method]="/>
+      <attrKeyMap attr="deviceIdentification" key="[device_identification]="/>
+      <attrKeyMap attr="compEventType" key="[event_type]="/>
+      <attrKeyMap attr="hostIpAddr" key="[host_ip]="/>
+      <attrKeyMap attr="origin_sic_name" key="[origin_sic_name]="/>
+      <attrKeyMap attr="osType" key="[os_name]="/>
+      <attrKeyMap attr="osVersion" key="[os_version]="/>
+      <attrKeyMap attr="product" key="[product]="/>
+      <attrKeyMap attr="errReason" key="[reason]="/>
+      <attrKeyMap attr="status" key="[status]="/>
+      <attrKeyMap attr="tunnelProtocol" key="[tunnel_protocol]="/>
+      <attrKeyMap attr="user" key="[User]="/>
+      <attrKeyMap attr="user" key="[user]="/>
+      <attrKeyMap attr="userDN" key="[user_dn]="/>
+      <attrKeyMap attr="userGrp" key="[user_group]="/>
+      <attrKeyMap attr="cacheHit" key="[cache_hit_rate]="/>
+      <attrKeyMap attr="errorNo" key="[error_count]="/>
+      <attrKeyMap attr="fileType" key="[file_type]="/>
+      <attrKeyMap attr="scannedFiles" key="[scanned]="/>
+      <attrKeyMap attr="threatFiles" key="[threatcloud_scanned]="/>
+      <attrKeyMap attr="logID" key="[log_id]="/>
+      <attrKeyMap attr="malwareDetected" key="[malware_detected]="/>
+      <attrKeyMap attr="malwareThreat" key="[threatcloud_malware]="/>
+      <attrKeyMap attr="fwRule" key="[rule]="/>
+      <attrKeyMap attr="ruleIdStr" key="[rule_uid]="/>
+      <attrKeyMap attr="policyName" key="[policy_name]="/>
+      <attrKeyMap attr="ruleName" key="[rule_name]="/>
+      <attrKeyMap attr="_policyTag" key="[__policy_id_tag]="/>
+    </collectAndSetAttrByKeyValuePair>
+    <when test="exist _policyTag">
+      <collectFieldsByRegex src="$_policyTag">
+        <regex><![CDATA[;policy_name=<policyName:gPatStrRightSB>\]]]></regex>
+      </collectFieldsByRegex>
+    </when>
+
+
+    <!-- special handling of all attrib with "_" -->
+
+    <!-- 1.event action and severity
+	 [action]=drop,
+	 [action]=accept,
+	 [action]=reject,
+	 [action]=ctl,
+      -->
+
+    <setEventAttribute attr="totFlows">1</setEventAttribute>
+    <choose>
+      <when test="$fileName = 'fw.log'">
+        <choose>
+          <when test="exist _eventAction">
+            <choose>
+              <when test="$_eventAction IN 'accept, allow'">
+                <setEventAttribute attr="eventAction">0</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+                <setEventAttribute attr="eventType">CheckPoint-permit-traffic</setEventAttribute>
+                <setEventAttribute attr="phEventCategory">4</setEventAttribute>
+              </when>
+
+              <when test="$_eventAction IN 'reject, drop, deny'">
+                <setEventAttribute attr="eventAction">1</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">3</setEventAttribute>
+                <setEventAttribute attr="eventType">combineMsgId("CheckPoint-", $_eventAction, "-traffic")</setEventAttribute>
+                <setEventAttribute attr="phEventCategory">4</setEventAttribute>
+              </when>
+
+              <when test="$_eventAction = 'ctl'">
+                <setEventAttribute attr="eventAction">0</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">3</setEventAttribute>
+                <setEventAttribute attr="eventType">combineMsgId("CheckPoint-FwLog-ctl")
+		</setEventAttribute>
+              </when>
+
+              <when test="$_eventAction = 'keyinst'">
+                <setEventAttribute attr="eventAction">0</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">3</setEventAttribute>
+                <setEventAttribute attr="eventType">Checkpoint-FwLog-keyinst</setEventAttribute>
+              </when>
+
+              <when test="$_eventAction = 'encrypt'">
+                <setEventAttribute attr="eventAction">0</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+                <setEventAttribute attr="eventType">Checkpoint-FwLog-encrypt</setEventAttribute>
+                <setEventAttribute attr="phEventCategory">4</setEventAttribute>
+              </when>
+
+              <when test="$_eventAction = 'authcrypt_failed'">
+                <setEventAttribute attr="eventAction">0</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">7</setEventAttribute>
+                <setEventAttribute attr="eventType">CheckPoint-VPN-Authentication-Failed</setEventAttribute>
+              </when>
+
+              <when test="$_eventAction = 'authcrypt'">
+                <setEventAttribute attr="eventAction">0</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">7</setEventAttribute>
+                <setEventAttribute attr="eventType">CheckPoint-VPN-Authentication-Success</setEventAttribute>
+              </when>
+
+              <when test="$_eventAction IN 'logout, monitor, update'">
+                <setEventAttribute attr="eventAction">0</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+                <setEventAttribute attr="eventType">combineMsgId("CheckPoint-FwLog-", $_eventAction)</setEventAttribute>
+              </when>
+
+              <otherwise>
+                <setEventAttribute attr="eventAction">0</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+                <setEventAttribute attr="eventType">combineMsgId("CheckPoint-FwLog-Generic")</setEventAttribute>
+              </otherwise>
+            </choose>
+          </when>
+          <otherwise>
+            <setEventAttribute attr="eventAction">0</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            <setEventAttribute attr="eventType">combineMsgId("CheckPoint-FwLog-Generic")
+	    </setEventAttribute>
+          </otherwise>
+        </choose>
+        <choose>
+          <when test="not_exist product"/>
+          <when test="$product = 'Threat Emulation'">
+            <setEventAttribute attr="eventType">CheckPoint-FwLog-Threat-Emulation</setEventAttribute>
+          </when>
+          <when test="$product IN 'Anti Malware, New Anti Virus'">
+            <setEventAttribute attr="eventType">CheckPoint-FwLog-Anti-Virus</setEventAttribute>
+          </when>
+        </choose>
+      </when>
+
+      <when test="$fileName = 'fw.adtlog'">
+        <choose>
+          <when test="$_operation = 'Log In'">
+            <choose>
+              <when test="exist _auditStatus">
+                <when test="$_auditStatus = 'Success'">
+                  <setEventAttribute attr="eventAction">0</setEventAttribute>
+                  <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+                  <setEventAttribute attr="eventType">combineMsgId("Checkpoint-Login-Success")</setEventAttribute>
+                </when>
+                <when test="$_auditStatus = 'Failure'">
+                  <setEventAttribute attr="eventAction">1</setEventAttribute>
+                  <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+                  <setEventAttribute attr="eventType">combineMsgId("Checkpoint-Login-Failure")</setEventAttribute>
+                </when>
+              </when>
+              <otherwise>
+                <setEventAttribute attr="eventAction">0</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+                <setEventAttribute attr="eventType">combineMsgId("CheckPoint-Login-Success")</setEventAttribute>
+              </otherwise>
+            </choose>
+          </when>
+
+          <when test="$_operation = 'Log Out'">
+            <setEventAttribute attr="eventAction">0</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            <setEventAttribute attr="eventType">combineMsgId("Checkpoint-Logout")</setEventAttribute>
+          </when>
+
+          <when test="$_operation = 'Install Policy'">
+            <choose>
+              <when test="exist _auditStatus">
+                <when test="$_auditStatus = 'Success'">
+                  <setEventAttribute attr="eventAction">0</setEventAttribute>
+                  <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+                  <setEventAttribute attr="eventType">combineMsgId("CheckPoint-InstallPolicy-Success")</setEventAttribute>
+                  <setEventAttribute attr="policyName">$_info2</setEventAttribute>
+                </when>
+                <when test="$_auditStatus = 'Failure'">
+                  <setEventAttribute attr="eventAction">1</setEventAttribute>
+                  <setEventAttribute attr="eventSeverity">9</setEventAttribute>
+                  <setEventAttribute attr="eventType">combineMsgId("CheckPoint-InstallPolicy-Failure")</setEventAttribute>
+                  <setEventAttribute attr="policyName">$_info2</setEventAttribute>
+                </when>
+              </when>
+              <otherwise>
+                <setEventAttribute attr="eventAction">0</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+                <setEventAttribute attr="eventType">combineMsgId("CheckPoint-InstallPolicy-Success")</setEventAttribute>
+                <setEventAttribute attr="policyName">$_info2</setEventAttribute>
+              </otherwise>
+            </choose>
+          </when>
+
+          <when test="$_operation = 'Modify Object'">
+            <choose>
+              <when test="exist _auditStatus">
+                <when test="$_auditStatus = 'Success'">
+                  <setEventAttribute attr="eventAction">0</setEventAttribute>
+                  <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+                  <setEventAttribute attr="eventType">combineMsgId("CheckPoint-ModifyObject-Success")</setEventAttribute>
+                </when>
+                <when test="$_auditStatus = 'Failure'">
+                  <setEventAttribute attr="eventAction">1</setEventAttribute>
+                  <setEventAttribute attr="eventSeverity">9</setEventAttribute>
+                  <setEventAttribute attr="eventType">combineMsgId("CheckPoint-ModifyObject-Failure")</setEventAttribute>
+                </when>
+              </when>
+              <otherwise>
+                <setEventAttribute attr="eventAction">0</setEventAttribute>
+                <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+                <setEventAttribute attr="eventType">combineMsgId("CheckPoint-ModifyObject-Success")</setEventAttribute>
+              </otherwise>
+            </choose>
+          </when>
+
+          <otherwise>
+            <setEventAttribute attr="eventAction">0</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+            <setEventAttribute attr="eventType">combineMsgId("Checkpoint-AuditLog-Generic")</setEventAttribute>
+          </otherwise>
+        </choose>
+      </when>
+    </choose>
+
+    <!-- 2.dest ip -->
+    <when test="exist _destIpAddr2">
+      <when test="matches($_destIpAddr2, gPatIpAddr)">
+        <setEventAttribute attr="destIpAddr">$_destIpAddr2</setEventAttribute>
+      </when>
+    </when>
+    <when test="exist _destIpAddr">
+      <when test="matches($_destIpAddr, gPatIpAddr)">
+        <setEventAttribute attr="destIpAddr">$_destIpAddr</setEventAttribute>
+      </when>
+    </when>
+
+    <!-- 3.device time
+         [time]= 9May2008  8:05:00, -->
+    <collectFieldsByRegex src="$_deviceTime">
+      <regex><![CDATA[<_day:gPatDay><_mon:gPatMon><_year:gPatYear>\s+<_time:gPatTime>]]></regex>
+    </collectFieldsByRegex>
+    <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_year, $_time)</setEventAttribute>
+
+
+    <!-- 4.event type (override for attack or IPS case) -->
+    <choose>
+      <when test="exist attackInfo">
+        <setEventAttribute attr="_info">replaceStringByRegex($attackInfo, "\s", "_")</setEventAttribute>
+        <setEventAttribute attr="eventType">combineMsgId("CheckPoint-ips-", $_info)</setEventAttribute>
+      </when>
+      <when test="exist attackName">
+        <setEventAttribute attr="_info">replaceStringByRegex($attackName, "\s+", "-")</setEventAttribute>
+        <setEventAttribute attr="eventType">combineMsgId("CheckPoint-", $_info)</setEventAttribute>
+      </when>
+    </choose>
+
+    <!-- 5.ip proto -->
+    <when test="exist _proto">
+      <choose>
+        <when test="matches($_proto, '\d+')">
+          <setEventAttribute attr="ipProto">$_proto</setEventAttribute>
+        </when>
+        <otherwise>
+          <setEventAttribute attr="ipProto">convertStrToIntIpProto($_proto)</setEventAttribute>
+        </otherwise>
+      </choose>
+    </when>
+
+    <!-- 6.severity (override for attack or IPS, Anti-Bot,Anti-virus, DLP case) -->
+    <when test="exist _ipsSev">
+      <when test="$_ipsSev = '0'">
+        <setEventAttribute attr="ipsSeverity">Info</setEventAttribute>
+        <setEventAttribute attr="eventSeverity">0</setEventAttribute>
+      </when>
+      <when test="$_ipsSev = '1'">
+        <setEventAttribute attr="ipsSeverity">Low</setEventAttribute>
+        <setEventAttribute attr="eventSeverity">2</setEventAttribute>
+      </when>
+      <when test="$_ipsSev = '2'">
+        <setEventAttribute attr="ipsSeverity">Medium</setEventAttribute>
+        <setEventAttribute attr="eventSeverity">7</setEventAttribute>
+      </when>
+      <when test="$_ipsSev = '3'">
+        <setEventAttribute attr="ipsSeverity">High</setEventAttribute>
+        <setEventAttribute attr="eventSeverity">9</setEventAttribute>
+      </when>
+      <when test="$_ipsSev = '4'">
+        <setEventAttribute attr="ipsSeverity">Critical</setEventAttribute>
+        <setEventAttribute attr="eventSeverity">10</setEventAttribute>
+      </when>
+    </when>
+
+    <!-- 7.confidence (override for attack or IPS, Anti-Bot,Anti-virus, DLP case) -->
+    <when test="exist _ipsConfidence">
+      <when test="$_ipsConfidence = '0'">
+        <setEventAttribute attr="ipsConfidence">Info</setEventAttribute>
+      </when>
+      <when test="$_ipsConfidence = '1'">
+        <setEventAttribute attr="ipsConfidence">Low</setEventAttribute>
+      </when>
+      <when test="$_ipsConfidence = '2'">
+        <setEventAttribute attr="ipsConfidence">Medium</setEventAttribute>
+      </when>
+      <when test="$_ipsConfidence = '3'">
+        <setEventAttribute attr="ipsConfidence">Medium-High</setEventAttribute>
+      </when>
+      <when test="$_ipsConfidence = '4'">
+        <setEventAttribute attr="ipsConfidence">High</setEventAttribute>
+      </when>
+    </when>
+    <when test="not_private_ip destIpAddr">
+      <when test="exist destName">
+        <setEventAttribute attr="domainEntropy">calcDomainEntropy($destName)</setEventAttribute>
+      </when>
+    </when>
+
+  </parsingInstructions>
+

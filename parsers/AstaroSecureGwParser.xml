@@ -1,0 +1,156 @@
+<patternDefinitions>
+    <pattern name="patSig"><![CDATA[httpproxy|ulogd|snort]]></pattern>
+    <pattern name="patDestName"><![CDATA[[^/]+]]></pattern>
+  </patternDefinitions>
+<eventFormatRecognizer><![CDATA[<:gPatYear>:<:gPatMon>:<:gPatDay>-<:gPatTime>\s+<_sig:patSig>\[\d+\]:\s+id="\d+"\s+severity="[a-zA-Z]+"\s+sys=]]></eventFormatRecognizer>
+<parsingInstructions>
+    <!-- parsing common fields -->
+    <switch>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI><_year:gPatYear>:<_mon:gPatMon>:<_day:gPatDay>-<_time:gPatTime>\s+<_sig:patSig>\[\d+\]: <_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+      </case>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI><:gPatMon>\s+<:gPatDay>\s+<:gPatTime>\s+<reptDevIpAddr:gPatIpAddr>\s<_year:gPatYear>:<_mon:gPatMon>:<_day:gPatDay>-<_time:gPatTime>\s+<_sig:patSig>\[\d+\]: <_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+      </case>
+    </switch>
+
+    <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_year, $_time)</setEventAttribute>
+    <setEventAttribute attr="eventAction">0</setEventAttribute>
+    <setEventAttribute attr="eventType">Astaro-Generic</setEventAttribute>
+    <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+
+    <!-- message specific parsing
+	 2009:03:31-11:12:21 httpproxy[3948]: id="0001" severity="info" sys="SecureWeb" sub="http" name="http access" action="pass" method="GET" srcip="10.0.2.53" user="" statuscode="200" cached="0" profile="REF_GlCTfbCuuA (IT )" filteraction="REF_FXbUQQToxQ (IT)" size="204" time="2358 ms" request="0xb2728318" url="http://abc.com/complete/search?qu=untangle" exceptions="" error="" category="145" categoryname="Search Engines" content-type="text/javascript"
+	 <30>2009:08:17-13:27:47 ulogd[3004]: id="2001" severity="info" sys="SecureNet" sub="packetfilter" name="Packet dropped" action="drop" fwrule="60001" seq="0" initf="br0" outitf="br0" dstmac="00:90:0b:07:8f:ce" srcmac="00:00:00:00:00:00" srcip="192.168.0.1" dstip="192.168.0.2" proto="17" length="78" tos="0x00" prec="0x00" ttl="128" srcport="137" dstport="137
+	 <30>2009:08:17-13:27:47 ulogd[3004]: id="2002" severity="info" sys="SecureNet" sub="packetfilter" name="Packet accepted" action="accept" fwrule="6" seq="0" initf="br0" outitf="br0" dstmac="00:90:0b:07:8f:ce" srcmac="00:90:0b:07:8f:ce" srcip="192.168.0.1" dstip="192.168.0.2" proto="17" length="71" tos="0x00" prec="0x00" ttl="128" srcport="24991" dstport="53"
+	 <30>Mar 30 16:30:53 172.16.255.68 2009:08:17-13:27:47 ulogd[3004]: id="2001" severity="info" sys="SecureNet" sub="packetfilter" name="Packet dropped" action="drop" fwrule="60001" seq="0" initf="br0" outitf="br0" dstmac="00:90:0b:07:8f:ce" srcmac="00:00:00:00:00:00" srcip="192.168.0.1" dstip="192.168.0.2" proto="17" length="78" tos="0x00" prec="0x00" ttl="128" srcport="137" dstport="137"
+    -->
+
+    <choose>
+      <when test="$_sig = 'httpproxy'">
+        <collectAndSetAttrByKeyValuePair sep=" " src="$_body">
+          <attrKeyMap attr="_name" key="name="/>
+          <attrKeyMap attr="_action" key="action="/>
+          <attrKeyMap attr="httpMethod" key="method="/>
+          <attrKeyMap attr="srcIpAddr" key="srcip="/>
+          <attrKeyMap attr="user" key="user="/>
+          <attrKeyMap attr="httpStatusCode" key="statuscode="/>
+          <attrKeyMap attr="policyName" key="profile="/>
+          <attrKeyMap attr="_filterPolicy" key="filteraction="/>
+          <attrKeyMap attr="totBytes64" key="size="/>
+          <attrKeyMap attr="_durationMsec" key="time="/>
+          <attrKeyMap attr="uriStem" key="url="/>
+          <attrKeyMap attr="_excep" key="exceptions="/>
+          <attrKeyMap attr="_error" key="error="/>
+          <attrKeyMap attr="webCategory" key="categoryname="/>
+          <attrKeyMap attr="httpContentType" key="content-type="/>
+        </collectAndSetAttrByKeyValuePair>
+
+        <choose>
+          <when test="$_action = 'pass'">
+            <setEventAttribute attr="eventAction">0</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            <setEventAttribute attr="eventType">"Astaro-Web-Filter-Pass"</setEventAttribute>
+          </when>
+          <when test="$_action = 'deny'">
+            <setEventAttribute attr="eventAction">1</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">7</setEventAttribute>
+            <setEventAttribute attr="eventType">"Astaro-Web-Filter-Block"</setEventAttribute>
+          </when>
+          <when test="$_action = 'block'">
+            <setEventAttribute attr="eventAction">1</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">7</setEventAttribute>
+            <setEventAttribute attr="eventType">"Astaro-Web-Filter-Block"</setEventAttribute>
+          </when>
+        </choose>
+
+        <when test="exist uriStem">
+          <switch>
+            <case>
+              <collectFieldsByRegex src="$uriStem">
+                <regex><![CDATA[://(?:<destIpAddr:gPatIpAddr>|<destName:patDestName>)/]]></regex>
+              </collectFieldsByRegex>
+              <when test="exist destIpAddr">
+                <when test="not_private_ip destIpAddr">
+                  <setEventAttribute attr="domainEntropy">calcDomainEntropy($_destName)</setEventAttribute>
+                </when>
+              </when>
+            </case>
+            <default/>
+          </switch>
+        </when>
+      </when>
+
+      <when test="$_sig = 'ulogd'">
+
+        <collectAndSetAttrByKeyValuePair sep=" " src="$_body">
+          <attrKeyMap attr="_action" key="action="/>
+          <attrKeyMap attr="srcIpAddr" key="srcip="/>
+          <attrKeyMap attr="srcIpPort" key="srcport="/>
+          <attrKeyMap attr="destIpAddr" key="dstip="/>
+          <attrKeyMap attr="destIpPort" key="dstport="/>
+          <attrKeyMap attr="srcMACAddr" key="srcmac="/>
+          <attrKeyMap attr="destMACAddr" key="dstmac="/>
+          <attrKeyMap attr="srcIntfName" key="initf="/>
+          <attrKeyMap attr="destIntfName" key="outitf="/>
+          <attrKeyMap attr="totBytes64" key="length="/>
+          <attrKeyMap attr="ipProto" key="proto="/>
+        </collectAndSetAttrByKeyValuePair>
+
+        <choose>
+          <when test="$_action = 'accept'">
+            <setEventAttribute attr="eventAction">0</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+            <setEventAttribute attr="eventType">"Astaro-Packet-Accept"</setEventAttribute>
+          </when>
+          <when test="$_action = 'drop'">
+            <setEventAttribute attr="eventAction">1</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">7</setEventAttribute>
+            <setEventAttribute attr="eventType">"Astaro-Packet-Drop"</setEventAttribute>
+          </when>
+        </choose>
+      </when>
+
+      <when test="$_sig = 'snort'">
+        <!--
+	     <25>2012:06:14-07:16:27 snort[32659]: id="2101" severity="warn" sys="SecureNet" sub="ips" name="Intrusion protection alert" action="alert" reason="ICMP Microsoft remote unauthenticated DoS/bugcheck vulnerability" group="410" srcip="192.168.0.1" dstip="192.168.0.2" proto="1" srcport="0" dstport="0" sid="19678" class="Attempted Denial of Service" priority="2"  generator="1" msgid="0"
+	-->
+
+        <collectAndSetAttrByKeyValuePair sep="' " src="$_body">
+          <attrKeyMap attr="_action" key="action='"/>
+          <attrKeyMap attr="srcIpAddr" key="srcip='"/>
+          <attrKeyMap attr="srcIpPort" key="srcport='"/>
+          <attrKeyMap attr="destIpAddr" key="dstip='"/>
+          <attrKeyMap attr="destIpPort" key="dstport='"/>
+          <attrKeyMap attr="ipProto" key="proto='"/>
+          <attrKeyMap attr="_sid" key="sid='"/>
+          <attrKeyMap attr="devEventTypeGrp" key="class='"/>
+          <attrKeyMap attr="_severity" key="priority='"/>
+        </collectAndSetAttrByKeyValuePair>
+
+        <setEventAttribute attr="eventType">combineMsgId("Astaro-Snort-", $_sid)</setEventAttribute>
+
+        <choose>
+          <when test="$_severity = '1'">
+            <setEventAttribute attr="eventSeverity">9</setEventAttribute>
+          </when>
+
+          <when test="$_severity = '2'">
+            <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+          </when>
+
+          <when test="$_severity = '3'">
+            <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+          </when>
+        </choose>
+
+      </when>
+
+    </choose>
+
+  </parsingInstructions>
+

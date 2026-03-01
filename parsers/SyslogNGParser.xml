@@ -1,0 +1,30 @@
+<patternDefinitions>
+    <pattern name="patYear"><![CDATA[\d{4}]]></pattern>
+    <!-- the strict version of host name pattern (RFC952) -->
+    <pattern name="patHostName"><![CDATA[[A-Za-z](?:[0-9A-Za-z.-]*[0-9A-Za-z])?]]></pattern>
+  </patternDefinitions>
+<eventFormatRecognizer><![CDATA[^\s*<:gPatSyslogPRI>?(?:<:gPatWeekday>\s+)?<:gPatMon>\s+<:gPatDay>\s+(?:<:gPatTime>\s+<:patYear>|<:patYear>\s+<:gPatTime>|<:gPatTime>)\s+(?:<:patHostName>\s+<:gPatIpAddr>|\[<:gPatIpAddr>\]|<:gPatIpAddr>|<:patHostName>)\s]]></eventFormatRecognizer>
+<parsingInstructions>
+    <switch>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatMon>\s+<:gPatDay>\s+(?:<:gPatTime>\s+<:patYear>|<:patYear>\s+<:gPatTime>|<:gPatTime>)\s+(?:<reptDevName:patHostName>\s+<_reptIp:gPatIpAddr>|\[<_reptIp:gPatIpAddr>\]|<_reptIp:gPatIpAddr>|<reptDevName:patHostName>)\b]]></regex>
+        </collectFieldsByRegex>
+
+        <setEventAttribute attr="_syslogNGHeader">yes</setEventAttribute>
+      </case>
+
+      <default/>
+    </switch>
+
+    <when test="exist _reptIp">
+      <when test="$_reptIp != '127.0.0.1'">
+        <when test="$_reptIp != '0.0.0.0'">
+          <when test="$_reptIp != '255.255.255.255'">
+            <setEventAttribute attr="reptDevIpAddr">$_reptIp</setEventAttribute>
+          </when>
+        </when>
+      </when>
+    </when>
+  </parsingInstructions>
+

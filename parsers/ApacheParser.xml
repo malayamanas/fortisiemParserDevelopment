@@ -1,0 +1,116 @@
+<patternDefinitions>
+    <pattern name="patApacheMod"><![CDATA[Apache_AccessLog:|Apache_ErrorLog:|ApacheLog:?|HTTP:|httpd:|apache2-access|apache2-errors]]></pattern>
+    <pattern name="patQuote"><![CDATA[[^"]*]]></pattern>
+    <pattern name="patExceptColon"><![CDATA[[^:]+]]></pattern>
+    <pattern name="patExceptComma"><![CDATA[[^,]+]]></pattern>
+  </patternDefinitions>
+<eventFormatRecognizer><![CDATA[<:gPatSyslogPRI>\s*<:gPatMon>\s+<:gPatDay>\s+<:gPatTime>\s+<:gPatStr>\s+<:patApacheMod>\s+(?:\d+\s+)?(?:<:gPatIpAddr>|\[<:gPatStr>)]]></eventFormatRecognizer>
+<parsingInstructions>
+    <!-- parsing common fields -->
+    <!-- sample message
+	  <142>Sep 17 13:27:37 example.com ApacheLog   192.168.20.35 - - [17/Sep/2009:13:27:37 -0700] "GET /icons/apache_pb2.gif HTTP/1.1" 200 2414 "http://192.168.0.30/" "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; .NET CLR 2.0.50727)".
+	  <142>Sep 17 13:27:37 example.com ApacheLog 0  192.168.20.35 - - [17/Sep/2009:13:27:37 -0700] "GET /icons/apache_pb2.gif HTTP/1.1" 200 2414 "http://192.168.0.30/" "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; .NET CLR 2.0.50727)".
+          <182>Mar 22 19:00:14 lab1.example.com Apache_ErrorLog: [Tue Mar 22 16:17:41.711593 2022] [proxy_http:error] [pid 1029463:tid 140695402702592] (104)Connection reset by peer: [client 192.168.0.30:59703] AH01102: error reading status line from remote server localhost:8181, referer: https://192.168.1.1/phoenix/html/analytics
+-->
+
+    <switch>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>\s*<:gPatMon>\s+<:gPatDay> <:gPatTime> <:gPatStr>\s+<:patApacheMod>\s+(?:\d+\s+)?<_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+      </case>
+      <case>
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>\s*<:gPatMon>\s+<:gPatDay> <:gPatTime> <:gPatStr>\s+<:patApacheMod>\s+\[<:gPatStr> <:gPatStr> <:gPatStr>\]\s+<_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+      </case>
+      <case>
+        <!-- catch error log formats -->
+        <collectFieldsByRegex src="$_rawmsg">
+          <regex><![CDATA[<:gPatSyslogPRI>\s*<:gPatMon>\s+<:gPatDay> <:gPatTime> <:gPatStr>\s+<:patApacheMod>\s+<_body:gPatMesgBody>]]></regex>
+        </collectFieldsByRegex>
+      </case>
+    </switch>
+
+    <setEventAttribute attr="eventAction">0</setEventAttribute>
+    <setEventAttribute attr="destIpAddr">$reptDevIpAddr</setEventAttribute>
+    <setEventAttribute attr="eventType">Apache-Web-Generic</setEventAttribute>
+    <setEventAttribute attr="totFlows">1</setEventAttribute>
+
+    <switch>
+      <case>
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[<srcIpAddr:gPatIpAddr> <:gPatStr> (?:<:gPatStr> )?<_user:gPatStr> \[<_day:gPatDay>/<_mon:gPatMon>/<_year:gPatYear>:<_time:gPatTime><_devTime:gPatStrRightSB>\] "<httpMethod:gPatStr> <_uriStem:gPatStr> <httpVersion:gPatStr>" <httpStatusCode:gPatInt> <recvBytes64:gPatStr>(?:\s+"<httpReferrer:patQuote>" "<httpUserAgent:patQuote>")?]]></regex>
+        </collectFieldsByRegex>
+        <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_year, $_time)</setEventAttribute>
+        <!-- translate status code into severity and event type -->
+        <choose>
+          <when test="matches($httpStatusCode, '^2')">
+            <setEventAttribute attr="eventType">Apache-Web-Request-Success</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+          </when>
+          <when test="matches($httpStatusCode, '^3')">
+            <setEventAttribute attr="eventType">Apache-Web-Request-Redirect</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">1</setEventAttribute>
+          </when>
+          <when test="matches($httpStatusCode, '^401')">
+            <setEventAttribute attr="eventType">Apache-Web-Client-Access-Denied</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+          </when>
+          <when test="matches($httpStatusCode, '^403')">
+            <setEventAttribute attr="eventType">Apache-Web-Forbidden-Access-Denied</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+          </when>
+          <when test="matches($httpStatusCode, '^400')">
+            <setEventAttribute attr="eventType">Apache-Web-Bad-Request</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+          </when>
+          <when test="matches($httpStatusCode, '^411')">
+            <setEventAttribute attr="eventType">Apache-Web-Length-Reqd-Access-Denied</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+          </when>
+          <when test="matches($httpStatusCode, '^4')">
+            <setEventAttribute attr="eventType">Apache-Web-Client-Error</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">5</setEventAttribute>
+          </when>
+          <when test="matches($httpStatusCode, '^5')">
+            <setEventAttribute attr="eventType">Apache-Web-Server-Error</setEventAttribute>
+            <setEventAttribute attr="eventSeverity">6</setEventAttribute>
+          </when>
+        </choose>
+
+        <switch>
+          <case>
+            <collectFieldsByRegex src="$_uriStem">
+              <regex><![CDATA[<uriStem:gPatStr>\?<uriQuery:gPatMesgBody>]]></regex>
+            </collectFieldsByRegex>
+            <collectAndSetAttrByKeyValuePair sep="&amp;" src="$uriQuery">
+              <attrKeyMap attr="groupName" key="name="/>
+              <attrKeyMap attr="procName" key="phProcessName="/>
+            </collectAndSetAttrByKeyValuePair>
+          </case>
+          <default>
+            <setEventAttribute attr="uriStem">$_uriStem</setEventAttribute>
+          </default>
+        </switch>
+
+        <when test="not_matches($_user, '^\W+$')">
+          <setEventAttribute attr="user">$_user</setEventAttribute>
+        </when>
+
+      </case>
+      <case>
+        <!-- ErrorLog [%{u}t] [%-m:%l] [pid %P:tid %T] %7F: %E: [client\ %a] %M% ,\ referer\ %{Referer}i -->
+        <!-- [Tue Mar 22 16:17:41.711593 2022] [proxy_http:error] [pid 1029463:tid 140695402702592] (104)Connection reset by peer: [client 192.168.0.30:59703] AH01102: error reading status line from remote server localhost:8181, referer: https://192.168.1.1/phoenix/html/analytics -->
+        <collectFieldsByRegex src="$_body">
+          <regex><![CDATA[\[<:gPatStr>\s+<_mon:gPatMon>\s+<_day:gPatDay>\s+<_time:gPatTime>\.\d+\s+<_year:gPatYear>\]\s+\[<module:patExceptColon>:<logLevel:gPatWord>\]\s+\[pid\s+<procId:gPatInt>(?::tid\s+<threadId:gPatInt>)?\]\s+(?:\(<errorNoInt:gPatInt>\)<errReason:patExceptColon>:\s+|<srcFileName:gPatStr>\s+\(<errorNoInt:gPatInt>\)<errReason:patExceptColon>:\s+)?\[client\s+<srcIpAddr:gPatIpAddr>:<srcIpPort:gPatInt>\]\s+<msg:patExceptComma>(?:,\s+referer:\s+<httpReferrer:gPatStr>)?]]></regex>
+        </collectFieldsByRegex>
+        <setEventAttribute attr="deviceTime">toDateTime($_mon, $_day, $_year, $_time)</setEventAttribute>
+        <setEventAttribute attr="eventType">Apache-Web-Server-Error</setEventAttribute>
+      </case>
+
+      <default/>
+    </switch>
+
+  </parsingInstructions>
+

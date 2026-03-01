@@ -1185,6 +1185,13 @@ git commit -m "feat: add XML parser generator for all supported formats"
 
 ## Task 7: Parser Simulator
 
+The simulator has two modes:
+1. **Single-parser mode** (`simulate`) — test one specific XML against N samples.
+2. **Library mode** (`test_against_library`) — test all enabled parsers against N samples.
+   Replicates how FortiSIEM actually works: every parser's `eventFormatRecognizer` is
+   checked in DB order; the first matching parser processes the log. Results show
+   matched/unmatched status, rank, extracted fields, and pass/fail for each sample.
+
 **Files:**
 - Create: `parser_studio/simulator.py`
 - Create: `tests/test_simulator.py`
@@ -1193,41 +1200,106 @@ git commit -m "feat: add XML parser generator for all supported formats"
 
 ```python
 # tests/test_simulator.py
-from parser_studio.simulator import simulate
+import pytest
+from parser_studio.simulator import simulate, test_against_library, _recognizer_matches
 from parser_studio.generator import generate_parser
+from parser_studio.db import init_db, save_parser
 
-META = {"name": "T", "vendor": "V", "model": "M", "version": "ANY", "anchor": "SENTINELONE_THREATS"}
+META  = {"name": "T", "vendor": "V", "model": "M", "version": "ANY", "anchor": "SENTINEL_TAG"}
+META2 = {"name": "T2", "vendor": "V2", "model": "M2", "version": "ANY", "anchor": "OTHER_TAG"}
 MAPPINGS = {"threatInfo.threatName": "msg", "accountName": "customer"}
-SAMPLE = ('Jul 23 00:33:28 2025 host 1.2.3.4 SENTINELONE_THREATS: '
-          '{"threatInfo":{"threatName":"Mimikatz"},"accountName":"LabCorp"}')
+
+SAMPLE_HIT = ('Jul 23 00:33:28 2025 host 1.2.3.4 SENTINEL_TAG: '
+              '{"threatInfo":{"threatName":"Mimikatz"},"accountName":"LabCorp"}')
+SAMPLE_MISS = ('Jul 23 00:33:28 2025 host 1.2.3.4 OTHER_TAG: '
+               '{"id":"abc","type":"firewall"}')
+
+# === single-parser simulate ===
 
 def test_simulate_extracts_fields():
-    xml_str = generate_parser(META, MAPPINGS, "syslog+json", [SAMPLE])
-    results = simulate(xml_str, [SAMPLE])
-    assert len(results) == 1
-    r = results[0]
-    assert r["msg"] == "Mimikatz"
-    assert r["customer"] == "LabCorp"
+    xml_str = generate_parser(META, MAPPINGS, "syslog+json", [SAMPLE_HIT])
+    results = simulate(xml_str, [SAMPLE_HIT])
+    assert results[0]["fields"]["msg"] == "Mimikatz"
+    assert results[0]["fields"]["customer"] == "LabCorp"
 
 def test_simulate_sets_device_time():
-    xml_str = generate_parser(META, MAPPINGS, "syslog+json", [SAMPLE])
-    results = simulate(xml_str, [SAMPLE])
-    assert "deviceTime" in results[0]
+    xml_str = generate_parser(META, MAPPINGS, "syslog+json", [SAMPLE_HIT])
+    assert "deviceTime" in simulate(xml_str, [SAMPLE_HIT])[0]["fields"]
 
-def test_simulate_event_type():
-    xml_str = generate_parser(META, MAPPINGS, "syslog+json", [SAMPLE])
-    results = simulate(xml_str, [SAMPLE])
-    assert results[0].get("eventType") == "T-Event"
-
-def test_simulate_event_severity():
-    xml_str = generate_parser(META, MAPPINGS, "syslog+json", [SAMPLE])
-    results = simulate(xml_str, [SAMPLE])
-    assert results[0].get("eventSeverity") == "5"
+def test_simulate_event_type_and_severity():
+    xml_str = generate_parser(META, MAPPINGS, "syslog+json", [SAMPLE_HIT])
+    r = simulate(xml_str, [SAMPLE_HIT])[0]
+    assert r["fields"].get("eventType") == "T-Event"
+    assert r["fields"].get("eventSeverity") == "5"
+    assert r["status"] == "pass"
 
 def test_simulate_multiple_samples():
-    xml_str = generate_parser(META, MAPPINGS, "syslog+json", [SAMPLE])
-    results = simulate(xml_str, [SAMPLE, SAMPLE])
-    assert len(results) == 2
+    xml_str = generate_parser(META, MAPPINGS, "syslog+json", [SAMPLE_HIT])
+    assert len(simulate(xml_str, [SAMPLE_HIT, SAMPLE_HIT])) == 2
+
+# === recognizer matching ===
+
+def test_recognizer_matches_hit():
+    xml_str = generate_parser(META, MAPPINGS, "syslog+json", [SAMPLE_HIT])
+    assert _recognizer_matches(xml_str, SAMPLE_HIT) is True
+
+def test_recognizer_matches_miss():
+    xml_str = generate_parser(META, MAPPINGS, "syslog+json", [SAMPLE_HIT])
+    assert _recognizer_matches(xml_str, SAMPLE_MISS) is False
+
+# === library mode ===
+
+def test_library_total_enabled(tmp_db):
+    init_db(tmp_db)
+    xml1 = generate_parser(META,  MAPPINGS, "syslog+json", [])
+    xml2 = generate_parser(META2, {}, "syslog+json", [])
+    save_parser(tmp_db, {"name":"T",  "scope":"enabled",  "parser_type":"User",
+                         "vendor":"V", "model":"M", "version":"ANY",
+                         "xml_content":xml1, "source":"studio", "file_path":None})
+    save_parser(tmp_db, {"name":"T2", "scope":"disabled", "parser_type":"User",
+                         "vendor":"V2","model":"M2","version":"ANY",
+                         "xml_content":xml2, "source":"studio", "file_path":None})
+    result = test_against_library([SAMPLE_HIT], tmp_db)
+    assert result["total_enabled"] == 1   # disabled parser not counted
+
+def test_library_first_match_wins(tmp_db):
+    init_db(tmp_db)
+    xml1 = generate_parser(META,  MAPPINGS, "syslog+json", [])
+    xml2 = generate_parser(META2, {}, "syslog+json", [])
+    save_parser(tmp_db, {"name":"T",  "scope":"enabled", "parser_type":"User",
+                         "vendor":"V", "model":"M","version":"ANY",
+                         "xml_content":xml1,"source":"studio","file_path":None})
+    save_parser(tmp_db, {"name":"T2", "scope":"enabled", "parser_type":"User",
+                         "vendor":"V2","model":"M2","version":"ANY",
+                         "xml_content":xml2,"source":"studio","file_path":None})
+    result = test_against_library([SAMPLE_HIT], tmp_db)
+    sample_res = result["per_sample"][0]
+    assert sample_res["first_match"] == "T"
+    assert sample_res["matched_count"] == 1
+
+def test_library_pass_fail_status(tmp_db):
+    init_db(tmp_db)
+    xml1 = generate_parser(META, MAPPINGS, "syslog+json", [])
+    save_parser(tmp_db, {"name":"T", "scope":"enabled", "parser_type":"User",
+                         "vendor":"V","model":"M","version":"ANY",
+                         "xml_content":xml1,"source":"studio","file_path":None})
+    result = test_against_library([SAMPLE_HIT], tmp_db)
+    hit_parser = result["per_sample"][0]["parsers"][0]
+    assert hit_parser["matched"] is True
+    assert hit_parser["status"] == "pass"
+    assert hit_parser["fields"].get("msg") == "Mimikatz"
+
+def test_library_unmatched_shows_skip(tmp_db):
+    init_db(tmp_db)
+    xml1 = generate_parser(META, MAPPINGS, "syslog+json", [])
+    save_parser(tmp_db, {"name":"T","scope":"enabled","parser_type":"User",
+                         "vendor":"V","model":"M","version":"ANY",
+                         "xml_content":xml1,"source":"studio","file_path":None})
+    result = test_against_library([SAMPLE_MISS], tmp_db)
+    parser_row = result["per_sample"][0]["parsers"][0]
+    assert parser_row["matched"] is False
+    assert parser_row["status"] == "skip"
+    assert parser_row["fields"] == {}
 ```
 
 **Step 2: Run tests to verify they fail**
@@ -1244,69 +1316,100 @@ import re
 import json
 import xml.etree.ElementTree as ET
 from parser_studio.extractor import _flatten_json
-from parser_studio.detector import strip_syslog_header
+from parser_studio.db import get_parsers
 
 _GPATTERNS = {
-    "gPatMon":      r'\w{3}|\d{1,2}',
-    "gPatDay":      r'\d{1,2}',
-    "gPatTime":     r'\d{1,2}:\d{1,2}:\d{1,2}',
-    "gPatYear":     r'\d{2,4}',
-    "gPatStr":      r'[^\s]+',
-    "gPatIpAddr":   r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}',
-    "gPatIpPort":   r'\d{1,5}',
-    "gPatInt":      r'\d+',
-    "gPatWord":     r'\w+',
-    "gPatMesgBody": r'.+',
+    "gPatMon":         r'\w{3}|\d{1,2}',
+    "gPatDay":         r'\d{1,2}',
+    "gPatTime":        r'\d{1,2}:\d{1,2}:\d{1,2}',
+    "gPatYear":        r'\d{2,4}',
+    "gPatStr":         r'[^\s]+',
+    "gPatIpAddr":      r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}',
+    "gPatIpPort":      r'\d{1,5}',
+    "gPatInt":         r'\d+',
+    "gPatWord":        r'\w+',
+    "gPatMesgBody":    r'.+',
     "gPatMesgBodyMin": r'.+?',
-    "gPatHostName": r'[\w.\-]+',
-    "gPatFqdn":     r'\w+(?:\.\w+)+',
+    "gPatHostName":    r'[\w.\-]+',
+    "gPatFqdn":        r'\w+(?:\.\w+)+',
+    "gPatStrDQ":       r'[^"]*',
+    "gPatStrSQ":       r"[^']*",
+    "gPatStrComma":    r'[^,]*',
 }
 
 
-def _fsm_regex_to_python(fsm_pattern: str) -> tuple[str, list[str]]:
+def _fsm_regex_to_python(fsm_pattern: str) -> str:
     """Convert FSM <attr:gPat> capture syntax to Python named-group regex."""
-    groups = []
     def replace_capture(m):
-        attr = m.group(1)
+        attr     = m.group(1)
         pat_name = m.group(2)
-        py_pat = _GPATTERNS.get(pat_name, r'\S+')
+        py_pat   = _GPATTERNS.get(pat_name, r'\S+')
         if attr:
-            groups.append(attr)
-            return f'(?P<{attr}>{py_pat})'
+            # sanitise attr name: replace spaces/dots with underscores
+            safe = re.sub(r'\W', '_', attr)
+            return f'(?P<{safe}>{py_pat})'
         return f'(?:{py_pat})'
-    pattern = re.sub(r'<([^:>]*):(\w+)>', replace_capture, fsm_pattern)
-    return pattern, groups
+    return re.sub(r'<([^:>]*):(\w+)>', replace_capture, fsm_pattern)
+
+
+def _recognizer_matches(xml_str: str, raw: str) -> bool:
+    """Return True if this parser's eventFormatRecognizer matches the raw log."""
+    try:
+        root = ET.fromstring(xml_str)
+    except ET.ParseError:
+        return False
+    rec_elem = root.find("eventFormatRecognizer")
+    if rec_elem is None:
+        return False
+    rec_text = rec_elem.text or ""
+    # Strip CDATA wrapper if present
+    rec_text = rec_text.strip()
+    try:
+        py_pat = _fsm_regex_to_python(rec_text)
+        return bool(re.search(py_pat, raw, re.DOTALL | re.IGNORECASE))
+    except re.error:
+        # Fall back to plain substring match on the literal anchor text
+        # (strip all <...> capture groups and treat remainder as literal)
+        plain = re.sub(r'<[^>]+>', '', rec_text).strip()
+        return bool(plain and plain in raw)
 
 
 def _apply_function(func_str: str, attrs: dict) -> str:
-    """Evaluate simple setEventAttribute function calls."""
     s = func_str.strip()
-    # Literal value (no function call)
     if not re.match(r'\w+\(', s):
-        if s.startswith('$'):
-            return attrs.get(s[1:], "")
-        return s
+        return attrs.get(s.lstrip('$'), s) if s.startswith('$') else s
 
-    # toDateTime(mon, day, year, time)
     m = re.match(r'toDateTime\((.+)\)', s)
     if m:
-        args = [a.strip().strip('"\'') for a in m.group(1).split(',')]
+        args  = [a.strip().strip('"\'') for a in m.group(1).split(',')]
         parts = [attrs.get(a.lstrip('$'), a) for a in args[:4]]
         return " ".join(parts)
 
-    # combineMsgId("prefix", $var, ...)
     m = re.match(r'combineMsgId\((.+)\)', s)
     if m:
         parts = []
         for tok in re.split(r',\s*', m.group(1)):
             tok = tok.strip().strip('"')
-            if tok.startswith('$'):
-                parts.append(attrs.get(tok[1:], tok))
-            else:
-                parts.append(tok)
+            parts.append(attrs.get(tok[1:], tok) if tok.startswith('$') else tok)
         return "".join(parts)
 
     return s
+
+
+def _eval_test(test: str, attrs: dict) -> bool:
+    test = test.strip()
+    for pat, fn in [
+        (r'^exist\s+(\S+)$',                  lambda m: m.group(1) in attrs and attrs[m.group(1)] != ""),
+        (r'^not_exist\s+(\S+)$',              lambda m: m.group(1) not in attrs or attrs[m.group(1)] == ""),
+        (r'^\$(\S+)\s*=\s*[\'"](.+)[\'"]$',   lambda m: attrs.get(m.group(1), "") == m.group(2)),
+        (r'^\$(\S+)\s*!=\s*[\'"](.+)[\'"]$',  lambda m: attrs.get(m.group(1), "") != m.group(2)),
+        (r'^\$(\S+)\s*IN\s*[\'"](.+)[\'"]$',
+         lambda m: attrs.get(m.group(1), "") in [v.strip() for v in m.group(2).split(',')]),
+    ]:
+        hit = re.match(pat, test)
+        if hit:
+            return fn(hit)
+    return False
 
 
 def _simulate_one(instructions_elem: ET.Element, raw: str) -> dict:
@@ -1316,130 +1419,195 @@ def _simulate_one(instructions_elem: ET.Element, raw: str) -> dict:
         tag = elem.tag
 
         if tag == "collectFieldsByRegex":
-            src_var = elem.attrib.get("src", "$_rawmsg").lstrip('$')
-            src_val = attrs.get(src_var, raw)
+            src_val = attrs.get(elem.attrib.get("src", "$_rawmsg").lstrip('$'), raw)
             regex_elem = elem.find("regex")
             if regex_elem is not None and regex_elem.text:
-                py_pat, _ = _fsm_regex_to_python(regex_elem.text.strip())
                 try:
-                    m = re.search(py_pat, src_val, re.DOTALL)
+                    m = re.search(_fsm_regex_to_python(regex_elem.text.strip()),
+                                  src_val, re.DOTALL)
                     if m:
-                        attrs.update(m.groupdict())
+                        attrs.update({k: v or "" for k, v in m.groupdict().items()})
                 except re.error:
                     pass
 
         elif tag == "collectAndSetAttrByJSON":
-            src_var = elem.attrib.get("src", "$_jsonBody").lstrip('$')
-            src_val = attrs.get(src_var, "")
+            src_val = attrs.get(elem.attrib.get("src", "$_jsonBody").lstrip('$'), "")
             start = src_val.find("{")
             if start != -1:
                 try:
-                    obj = json.loads(src_val[start:])
-                    flat = _flatten_json(obj)
+                    flat = _flatten_json(json.loads(src_val[start:]))
                     for km in elem.findall("attrKeyMap"):
-                        attr = km.attrib["attr"]
-                        key  = km.attrib["key"]
-                        if key in flat:
-                            attrs[attr] = flat[key]
+                        v = flat.get(km.attrib["key"])
+                        if v is not None:
+                            attrs[km.attrib["attr"]] = v
                 except (ValueError, KeyError):
                     pass
 
         elif tag == "collectAndSetAttrByKeyValuePair":
-            src_var = elem.attrib.get("src", "$_body").lstrip('$')
-            src_val = attrs.get(src_var, "")
-            flat = {}
-            for m in re.finditer(r'(\w[\w\s]{0,20}?)=([^\s,]+)', src_val):
-                flat[m.group(1).strip()] = m.group(2)
+            src_val = attrs.get(elem.attrib.get("src", "$_body").lstrip('$'), "")
+            flat = {m.group(1).strip(): m.group(2)
+                    for m in re.finditer(r'(\w[\w\s]{0,20}?)=([^\s,]+)', src_val)}
             for km in elem.findall("attrKeyMap"):
-                attr = km.attrib["attr"]
-                key  = km.attrib["key"]
-                if key in flat:
-                    attrs[attr] = flat[key]
+                if km.attrib["key"] in flat:
+                    attrs[km.attrib["attr"]] = flat[km.attrib["key"]]
 
         elif tag == "setEventAttribute":
             attr = elem.attrib.get("attr", "")
-            val  = _apply_function(elem.text or "", attrs)
             if attr:
-                attrs[attr] = val
+                attrs[attr] = _apply_function(elem.text or "", attrs)
 
         elif tag == "when":
-            test = elem.attrib.get("test", "")
-            if _eval_test(test, attrs):
-                nested = ET.Element("parsingInstructions")
-                nested.extend(list(elem))
-                sub = _simulate_one(nested, raw)
-                attrs.update(sub)
+            if _eval_test(elem.attrib.get("test", ""), attrs):
+                wrapper = ET.Element("p")
+                wrapper.extend(list(elem))
+                attrs.update(_simulate_one(wrapper, raw))
 
         elif tag == "choose":
             for child in elem:
-                if child.tag == "when":
-                    if _eval_test(child.attrib.get("test", ""), attrs):
-                        nested = ET.Element("parsingInstructions")
-                        nested.extend(list(child))
-                        attrs.update(_simulate_one(nested, raw))
-                        break
+                if child.tag == "when" and _eval_test(child.attrib.get("test", ""), attrs):
+                    wrapper = ET.Element("p")
+                    wrapper.extend(list(child))
+                    attrs.update(_simulate_one(wrapper, raw))
+                    break
                 elif child.tag == "otherwise":
-                    nested = ET.Element("parsingInstructions")
-                    nested.extend(list(child))
-                    attrs.update(_simulate_one(nested, raw))
+                    wrapper = ET.Element("p")
+                    wrapper.extend(list(child))
+                    attrs.update(_simulate_one(wrapper, raw))
 
     return attrs
 
 
-def _eval_test(test: str, attrs: dict) -> bool:
-    """Evaluate a simple FSM when-test expression."""
-    test = test.strip()
-    m = re.match(r'^exist\s+(\S+)$', test)
-    if m:
-        return m.group(1) in attrs and attrs[m.group(1)] != ""
-    m = re.match(r'^not_exist\s+(\S+)$', test)
-    if m:
-        return m.group(1) not in attrs or attrs[m.group(1)] == ""
-    m = re.match(r'^\$(\S+)\s*=\s*[\'"](.+)[\'"]$', test)
-    if m:
-        return attrs.get(m.group(1), "") == m.group(2)
-    m = re.match(r'^\$(\S+)\s*!=\s*[\'"](.+)[\'"]$', test)
-    if m:
-        return attrs.get(m.group(1), "") != m.group(2)
-    return False
-
+# ─────────────────────────────────────────────────────────────
+# Public API
+# ─────────────────────────────────────────────────────────────
 
 def simulate(xml_str: str, samples: list[str]) -> list[dict]:
     """
-    Simulate a generated parser XML against raw log samples.
-    Returns list of attribute dicts (one per sample), filtered to EATs only.
+    Single-parser mode. Returns one result dict per sample:
+    {
+      "fields":  {eat: value, ...},   # public EATs resolved
+      "status":  "pass" | "fail",     # pass = eventType present
+    }
     """
     try:
         root = ET.fromstring(xml_str)
     except ET.ParseError:
-        return [{"_error": "Invalid XML"} for _ in samples]
+        return [{"fields": {}, "status": "fail", "error": "Invalid XML"}
+                for _ in samples]
 
     instructions = root.find("parsingInstructions")
     if instructions is None:
-        return [{"_error": "No parsingInstructions"} for _ in samples]
+        return [{"fields": {}, "status": "fail", "error": "No parsingInstructions"}
+                for _ in samples]
 
     results = []
     for raw in samples:
-        attrs = _simulate_one(instructions, raw)
-        # Filter out private temp vars (starting with _) except useful ones
-        public = {k: v for k, v in attrs.items()
-                  if not k.startswith("_") or k in ("_rawmsg",)}
-        results.append(public)
+        attrs  = _simulate_one(instructions, raw)
+        public = {k: v for k, v in attrs.items() if not k.startswith("_")}
+        status = "pass" if public.get("eventType") else "fail"
+        results.append({"fields": public, "status": status})
     return results
+
+
+def test_against_library(samples: list[str], db_path: str) -> dict:
+    """
+    Library mode — replicates FortiSIEM parser selection:
+    - All enabled parsers are checked in DB order (ascending id).
+    - The FIRST parser whose recognizer matches a sample is the "winner"
+      for that sample; subsequent matching parsers are also shown but
+      flagged as non-primary.
+    - Disabled parsers are excluded entirely.
+
+    Returns:
+    {
+      "total_enabled": int,
+      "per_sample": [
+        {
+          "raw":           str,
+          "matched_count": int,          # parsers whose recognizer matched
+          "first_match":   str | None,   # name of first matching parser
+          "parsers": [
+            {
+              "rank":       int,          # check order (1-based)
+              "name":       str,
+              "vendor":     str,
+              "model":      str,
+              "matched":    bool,         # recognizer matched?
+              "primary":    bool,         # True only for first match
+              "status":     "pass"|"fail"|"skip",
+              "fields":     dict,         # extracted EATs (empty if not matched)
+              "event_type": str,          # value of eventType or ""
+              "event_severity": str,      # value of eventSeverity or ""
+            }
+          ]
+        }
+      ]
+    }
+    """
+    all_parsers = [p for p in get_parsers(db_path) if p["scope"] == "enabled"]
+    total_enabled = len(all_parsers)
+
+    per_sample = []
+    for raw in samples:
+        parser_rows = []
+        matched_count = 0
+        first_match   = None
+
+        for rank, p in enumerate(all_parsers, start=1):
+            xml_str = p.get("xml_content") or ""
+            matched = _recognizer_matches(xml_str, raw) if xml_str else False
+
+            if not matched:
+                parser_rows.append({
+                    "rank": rank, "name": p["name"],
+                    "vendor": p.get("vendor", ""), "model": p.get("model", ""),
+                    "matched": False, "primary": False,
+                    "status": "skip", "fields": {},
+                    "event_type": "", "event_severity": "",
+                })
+                continue
+
+            matched_count += 1
+            is_primary = first_match is None
+            if is_primary:
+                first_match = p["name"]
+
+            sim = simulate(xml_str, [raw])[0]
+            parser_rows.append({
+                "rank":           rank,
+                "name":           p["name"],
+                "vendor":         p.get("vendor", ""),
+                "model":          p.get("model", ""),
+                "matched":        True,
+                "primary":        is_primary,
+                "status":         sim["status"],
+                "fields":         sim["fields"],
+                "event_type":     sim["fields"].get("eventType", ""),
+                "event_severity": sim["fields"].get("eventSeverity", ""),
+            })
+
+        per_sample.append({
+            "raw":           raw,
+            "matched_count": matched_count,
+            "first_match":   first_match,
+            "parsers":       parser_rows,
+        })
+
+    return {"total_enabled": total_enabled, "per_sample": per_sample}
 ```
 
 **Step 4: Run tests**
 
 ```bash
 pytest tests/test_simulator.py -v
-# Expected: 5 passed
+# Expected: 11 passed
 ```
 
 **Step 5: Commit**
 
 ```bash
 git add parser_studio/simulator.py tests/test_simulator.py
-git commit -m "feat: add parser simulation engine"
+git commit -m "feat: add simulator with single-parser and library-mode multi-parser testing"
 ```
 
 ---
@@ -1616,7 +1784,7 @@ from parser_studio.detector import detect_format
 from parser_studio.extractor import extract_fields
 from parser_studio.mapper import suggest_mappings
 from parser_studio.generator import generate_parser
-from parser_studio.simulator import simulate
+from parser_studio.simulator import simulate, test_against_library
 from parser_studio.importer import sync_parsers
 import xml.etree.ElementTree as ET
 
@@ -1708,11 +1876,24 @@ def api_validate():
 
 @app.route("/api/test", methods=["POST"])
 def api_test():
+    """Two modes:
+    - Single-parser: body contains "xml" → simulate() against provided XML.
+    - Library mode: no "xml" → test_against_library() checks all enabled parsers.
+    """
     data    = request.get_json(force=True)
-    xml_str = data.get("xml", "")
-    samples = data.get("samples", [])
-    results = simulate(xml_str, samples)
-    return jsonify({"results": results})
+    xml_str = (data.get("xml") or "").strip()
+    samples = [s for s in data.get("samples", []) if s.strip()]
+    if not samples:
+        return jsonify({"error": "No samples provided"}), 400
+
+    if xml_str:
+        # Single-parser mode
+        results = simulate(xml_str, samples)
+        return jsonify({"mode": "single", "results": results})
+    else:
+        # Library mode: rank all enabled parsers and return structured result
+        result = test_against_library(samples, DB_PATH)
+        return jsonify({"mode": "library", **result})
 
 
 # === Save Parser ===
@@ -1798,7 +1979,7 @@ curl -s -X POST http://localhost:5000/api/analyze \
 ```bash
 kill %1
 git add parser_studio.py
-git commit -m "feat: add full Flask API routes (analyze, generate, validate, test, save, sync)"
+git commit -m "feat: add full Flask API routes (analyze, generate, validate, test single+library, save, sync)"
 ```
 
 ---
@@ -1943,30 +2124,130 @@ git commit -m "feat: add full Flask API routes (analyze, generate, validate, tes
 
   <!-- TEST MODAL -->
   <div class="modal-overlay" x-show="showTestModal" @click.self="showTestModal = false">
-    <div class="modal">
+    <div class="modal modal-wide">
       <div class="modal-header">
         <h3>Parser Test Results</h3>
         <button @click="showTestModal = false" class="btn btn-sm">✕</button>
       </div>
       <div class="modal-body">
-        <button @click="runTest()" class="btn btn-primary" :disabled="testing">
-          <span x-text="testing ? 'Testing...' : 'Run Test'"></span>
-        </button>
-        <template x-if="testResults.length > 0">
+
+        <!-- Run button + mode label -->
+        <div class="modal-toolbar">
+          <button @click="runTest()" class="btn btn-primary" :disabled="testing">
+            <span x-text="testing ? 'Testing...' : 'Run Test'"></span>
+          </button>
+          <span x-show="!testing && testMode === 'single'" class="badge">Single-parser mode</span>
+          <span x-show="!testing && testMode === 'library'" class="badge">Library mode — checking all enabled parsers</span>
+        </div>
+
+        <!-- SINGLE-PARSER MODE: simple field table per sample -->
+        <template x-if="testMode === 'single' && testResultsSingle.length > 0">
           <div>
-            <template x-for="(result, i) in testResults" :key="i">
+            <template x-for="(result, i) in testResultsSingle" :key="i">
               <div class="test-result">
-                <h4 x-text="'Sample ' + (i+1)"></h4>
+                <h4>
+                  <span x-text="'Sample ' + (i+1)"></span>
+                  <span :class="result.status === 'pass' ? 'badge badge-ok' : 'badge badge-err'"
+                        x-text="result.status === 'pass' ? 'PASS' : 'FAIL'"></span>
+                </h4>
                 <table class="result-table">
-                  <tr><th>EAT</th><th>Value</th></tr>
-                  <template x-for="[k, v] in Object.entries(result)" :key="k">
-                    <tr><td x-text="k"></td><td x-text="v"></td></tr>
-                  </template>
+                  <thead><tr><th>EAT</th><th>Value</th></tr></thead>
+                  <tbody>
+                    <template x-for="[k, v] in Object.entries(result.fields)" :key="k">
+                      <tr><td x-text="k"></td><td class="mono" x-text="v"></td></tr>
+                    </template>
+                    <tr x-show="Object.keys(result.fields).length === 0">
+                      <td colspan="2" class="hint">No fields extracted.</td>
+                    </tr>
+                  </tbody>
                 </table>
               </div>
             </template>
           </div>
         </template>
+
+        <!-- LIBRARY MODE: per-sample summary + ranked parser table -->
+        <template x-if="testMode === 'library' && testResultsLibrary">
+          <div>
+            <!-- Global summary -->
+            <p class="summary-line">
+              Total enabled parsers in library:
+              <strong x-text="testResultsLibrary.total_enabled"></strong>
+            </p>
+
+            <template x-for="(sampleResult, si) in testResultsLibrary.per_sample" :key="si">
+              <div class="test-result">
+                <!-- Per-sample summary header -->
+                <h4>Sample <span x-text="si + 1"></span></h4>
+                <p class="summary-line">
+                  Checked: <strong x-text="testResultsLibrary.total_enabled"></strong>
+                  &nbsp;|&nbsp;
+                  Matched: <strong x-text="sampleResult.matched_count"></strong>
+                  &nbsp;|&nbsp;
+                  First match:
+                  <strong x-text="sampleResult.first_match || 'none'"></strong>
+                </p>
+
+                <!-- Per-parser ranked table -->
+                <table class="result-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Parser Name</th>
+                      <th>Vendor / Model</th>
+                      <th>Matched</th>
+                      <th>Primary</th>
+                      <th>Status</th>
+                      <th>eventType</th>
+                      <th>Severity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="p in sampleResult.parsers" :key="p.rank">
+                      <tr :class="!p.matched ? 'row-skip' : (p.primary ? 'row-primary' : '')">
+                        <td x-text="p.rank"></td>
+                        <td x-text="p.name"></td>
+                        <td x-text="p.vendor + ' / ' + p.model"></td>
+                        <td>
+                          <span x-show="p.matched" class="badge badge-ok">HIT</span>
+                          <span x-show="!p.matched" class="badge">—</span>
+                        </td>
+                        <td x-text="p.primary ? '★' : ''"></td>
+                        <td>
+                          <span x-show="p.status === 'pass'" class="badge badge-ok">PASS</span>
+                          <span x-show="p.status === 'fail'" class="badge badge-err">FAIL</span>
+                          <span x-show="p.status === 'skip'" class="badge">skip</span>
+                        </td>
+                        <td class="mono" x-text="p.event_type || ''"></td>
+                        <td x-text="p.event_severity || ''"></td>
+                      </tr>
+                      <!-- Expandable field detail row for matched parsers -->
+                      <tr x-show="p.matched && Object.keys(p.fields).length > 0"
+                          class="row-detail">
+                        <td colspan="8">
+                          <details>
+                            <summary>Extracted fields (<span x-text="Object.keys(p.fields).length"></span>)</summary>
+                            <table class="detail-table">
+                              <tbody>
+                                <template x-for="[k, v] in Object.entries(p.fields)" :key="k">
+                                  <tr>
+                                    <td class="detail-key" x-text="k"></td>
+                                    <td class="mono" x-text="v"></td>
+                                  </tr>
+                                </template>
+                              </tbody>
+                            </table>
+                          </details>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+        </template>
+
       </div>
     </div>
   </div>
@@ -2025,7 +2306,10 @@ function studioApp() {
     validateResult: null, validateError: '',
 
     // Test modal
-    showTestModal: false, testing: false, testResults: [],
+    showTestModal: false, testing: false,
+    testMode: '',                  // 'single' | 'library'
+    testResultsSingle: [],         // [{fields, status}] — single-parser mode
+    testResultsLibrary: null,      // {total_enabled, per_sample:[...]} — library mode
 
     // Parser library
     parserLibrary: [],
@@ -2103,14 +2387,25 @@ function studioApp() {
 
     async runTest() {
       this.testing = true;
+      this.testMode = '';
+      this.testResultsSingle = [];
+      this.testResultsLibrary = null;
       try {
+        // If generatedXml exists: single-parser mode; otherwise library mode.
+        const body = { samples: this.samples };
+        if (this.generatedXml) body.xml = this.generatedXml;
         const res = await fetch('/api/test', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ xml: this.generatedXml, samples: this.samples }),
+          body: JSON.stringify(body),
         });
         const data = await res.json();
-        this.testResults = data.results;
+        this.testMode = data.mode;
+        if (data.mode === 'single') {
+          this.testResultsSingle = data.results;
+        } else {
+          this.testResultsLibrary = data;
+        }
       } finally { this.testing = false; }
     },
 
@@ -2216,12 +2511,28 @@ tr.skipped { opacity: .45; }
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4);
                  display: flex; align-items: center; justify-content: center; z-index: 100; }
 .modal { background: white; border-radius: 10px; width: 90%; max-width: 800px;
-         max-height: 80vh; display: flex; flex-direction: column; }
+         max-height: 85vh; display: flex; flex-direction: column; }
+.modal-wide { max-width: 1100px; }
 .modal-header { display: flex; justify-content: space-between; align-items: center;
                 padding: 1rem 1.25rem; border-bottom: 1px solid #e5e7eb; }
 .modal-body { padding: 1.25rem; overflow-y: auto; }
-.test-result { margin-bottom: 1.25rem; }
-.test-result h4 { margin-bottom: .5rem; font-size: .9rem; }
+.modal-toolbar { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+.test-result { margin-bottom: 1.5rem; }
+.test-result h4 { margin-bottom: .5rem; font-size: .9rem;
+                  display: flex; align-items: center; gap: .5rem; }
+.summary-line { font-size: .85rem; color: #374151; margin-bottom: .6rem; }
+
+/* Library mode row states */
+.row-primary td:first-child { font-weight: 700; }
+.row-skip { opacity: .45; }
+.row-detail td { background: #f9fafb; padding: .4rem .75rem; }
+
+/* Expandable field detail inside table */
+details summary { cursor: pointer; font-size: .8rem; color: #3b82f6; font-weight: 500; }
+.detail-table { width: 100%; font-size: .8rem; margin-top: .4rem; }
+.detail-table td { border: none; padding: .2rem .4rem; }
+.detail-key { font-weight: 600; width: 180px; color: #374151; }
+.mono { font-family: monospace; font-size: .8rem; }
 ```
 
 **Step 3: Verify the UI loads**
@@ -2236,7 +2547,7 @@ python3 parser_studio.py
 
 ```bash
 git add parser_studio/templates/index.html parser_studio/static/style.css
-git commit -m "feat: add full Alpine.js UI with metadata, field mapping, XML preview, test modal"
+git commit -m "feat: add full Alpine.js UI with metadata, field mapping, XML preview, enhanced test modal (single + library mode)"
 ```
 
 ---
@@ -2316,10 +2627,10 @@ git commit -m "feat: complete FortiSIEM Parser Studio v1"
 | 4 | `extractor.py` | `test_extractor.py` (6 tests) |
 | 5 | `eat_table.py` + `mapper.py` | `test_mapper.py` (8 tests) |
 | 6 | `generator.py` | `test_generator.py` (9 tests) |
-| 7 | `simulator.py` | `test_simulator.py` (5 tests) |
+| 7 | `simulator.py` | `test_simulator.py` (11 tests: single-parser + library mode) |
 | 8 | `importer.py` | `test_importer.py` (4 tests) |
-| 9 | Flask routes | manual curl |
-| 10 | UI (`index.html` + CSS) | manual browser |
+| 9 | Flask routes | manual curl (single + library `/api/test`) |
+| 10 | UI (`index.html` + CSS) | manual browser (single-parser modal + library modal) |
 | 11 | End-to-end smoke test | manual + `pytest` |
 
-**Total automated tests: 44**
+**Total automated tests: 50**
