@@ -27,7 +27,7 @@ def _load_device_types_from_file() -> list[tuple]:
                 entries.append((text, "ANY", "ANY"))
     return entries
 from parser_studio.detector import detect_format
-from parser_studio.extractor import extract_fields
+from parser_studio.extractor import extract_fields, build_token_matrix
 from parser_studio.mapper import suggest_mappings
 from parser_studio.generator import generate_parser
 from parser_studio.simulator import simulate, test_against_library
@@ -87,11 +87,14 @@ def api_analyze():
     fmt    = detect_format(samples)
     fields = extract_fields(samples, fmt)
     mappings = suggest_mappings(list(fields.keys()))
+    matrix = build_token_matrix(samples, fmt)
 
     return jsonify({
-        "format":   fmt,
-        "fields":   fields,
-        "mappings": mappings,
+        "format":       fmt,
+        "fields":       fields,
+        "mappings":     mappings,
+        "token_matrix": matrix,
+        "sample_count": len(samples),
     })
 
 

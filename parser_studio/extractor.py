@@ -79,6 +79,30 @@ def _extract_one(raw: str, fmt: str) -> dict[str, str]:
     return {f"_token{i}": tok for i, tok in enumerate(tokens[:20])}
 
 
+def build_token_matrix(samples: list[str], fmt: str) -> list[dict]:
+    """
+    Return one row per unique token across all samples.
+
+    Each row:
+      {
+        "token":      str,          # field/token name
+        "values":     [str, ...],   # one entry per sample (empty string if absent)
+        "consistent": bool,         # True when all non-empty values are identical
+      }
+    Rows are sorted alphabetically by token name.
+    """
+    clean = [s.strip() for s in samples if s.strip()]
+    per_sample = [_extract_one(s, fmt) for s in clean]
+    all_tokens = sorted({k for d in per_sample for k in d})
+    rows = []
+    for token in all_tokens:
+        values = [d.get(token, "") for d in per_sample]
+        non_empty = [v for v in values if v]
+        consistent = len(set(non_empty)) <= 1
+        rows.append({"token": token, "values": values, "consistent": consistent})
+    return rows
+
+
 def extract_fields(samples: list[str], fmt: str) -> dict[str, dict]:
     """
     Extract and merge fields from all samples.

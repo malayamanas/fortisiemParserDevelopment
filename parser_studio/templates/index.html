@@ -79,6 +79,38 @@
     <p x-show="analyzeError" class="error" x-text="analyzeError"></p>
   </section>
 
+  <!-- TOKEN MATRIX PANEL -->
+  <section class="panel" x-show="tokenMatrix.length > 0">
+    <h2>Token Matrix
+      <span class="badge" x-text="tokenMatrix.length + ' tokens \u00d7 ' + sampleCount + ' samples'"></span>
+    </h2>
+    <p class="hint">Each row is a token extracted from the logs. Green = same value across all samples. Blank = token absent in that sample.</p>
+    <div style="overflow-x:auto">
+      <table class="mapping-table" style="white-space:nowrap">
+        <thead>
+          <tr>
+            <th style="min-width:180px">Token</th>
+            <template x-for="(_, si) in Array.from({length: sampleCount})" :key="si">
+              <th x-text="'Sample ' + (si + 1)"></th>
+            </template>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="row in tokenMatrix" :key="row.token">
+            <tr :style="row.consistent ? 'background:#0d2818' : ''">
+              <td class="mono" x-text="row.token"></td>
+              <template x-for="(val, vi) in row.values" :key="vi">
+                <td class="mono"
+                    :style="val === '' ? 'color:#4b5563' : (row.consistent ? 'color:#4ade80' : 'color:#e2e8f0')"
+                    x-text="val === '' ? '\u2014' : val"></td>
+              </template>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <!-- FIELD MAPPINGS PANEL -->
   <section class="panel" x-show="detectedFormat">
     <h2>Field Mappings
@@ -579,6 +611,7 @@ function studioApp() {
     // Analysis results
     analyzing: false, analyzeError: '',
     detectedFormat: '', fields: {}, suggestions: {},
+    tokenMatrix: [], sampleCount: 0,
 
     // Mappings
     confirmedMappings: {},
@@ -678,6 +711,8 @@ function studioApp() {
         this.detectedFormat = data.format;
         this.fields = data.fields;
         this.suggestions = data.mappings;
+        this.tokenMatrix = data.token_matrix || [];
+        this.sampleCount = data.sample_count || 0;
         // Pre-fill confirmed mappings with top suggestion
         this.confirmedMappings = {};
         for (const [field, sugs] of Object.entries(data.mappings)) {
