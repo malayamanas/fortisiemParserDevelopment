@@ -1,2 +1,454 @@
 <!DOCTYPE html>
-<html><body><h1>FortiSIEM Parser Studio</h1></body></html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FortiSIEM Parser Studio</title>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+<div x-data="studioApp()" class="container">
+
+  <header>
+    <h1>FortiSIEM Parser Studio</h1>
+    <button @click="syncFromDisk()" class="btn btn-secondary">&#8635; Sync from disk</button>
+  </header>
+
+  <!-- METADATA PANEL -->
+  <section class="panel">
+    <h2>Parser Metadata</h2>
+    <div class="form-grid">
+      <label>Name
+        <input type="text" x-model="meta.name" placeholder="MyVendorParser"/>
+      </label>
+      <label>Scope
+        <select x-model="meta.scope">
+          <option value="enabled">Enabled</option>
+          <option value="disabled">Disabled</option>
+        </select>
+      </label>
+      <label>Type
+        <select x-model="meta.parser_type">
+          <option value="User">User</option>
+          <option value="System">System</option>
+        </select>
+      </label>
+      <label>Vendor
+        <select x-model="meta.vendor" @change="updateModels()">
+          <option value="">-- select vendor --</option>
+          <template x-for="v in vendors" :key="v">
+            <option :value="v" x-text="v"></option>
+          </template>
+        </select>
+      </label>
+      <label>Model
+        <select x-model="meta.model">
+          <option value="">-- select model --</option>
+          <template x-for="m in filteredModels" :key="m">
+            <option :value="m" x-text="m"></option>
+          </template>
+        </select>
+      </label>
+      <label>Version
+        <input type="text" x-model="meta.version" placeholder="ANY"/>
+      </label>
+      <label>Anchor tag (unique string in log)
+        <input type="text" x-model="meta.anchor" placeholder="VENDOR_LOGTAG"/>
+      </label>
+    </div>
+  </section>
+
+  <!-- SAMPLES PANEL -->
+  <section class="panel">
+    <h2>Event Log Samples
+      <button @click="addSample()" class="btn btn-sm">+ Add Sample</button>
+    </h2>
+    <template x-for="(s, i) in samples" :key="i">
+      <div class="sample-block">
+        <div class="sample-header">
+          <span x-text="'Sample ' + (i+1)"></span>
+          <button x-show="samples.length > 1" @click="removeSample(i)" class="btn btn-danger btn-sm">&#10005;</button>
+        </div>
+        <textarea x-model="samples[i]" rows="3" placeholder="Paste raw log line here..."></textarea>
+      </div>
+    </template>
+    <button @click="analyze()" class="btn btn-primary" :disabled="analyzing">
+      <span x-text="analyzing ? 'Analyzing...' : 'Analyze Samples \u2192'"></span>
+    </button>
+    <p x-show="analyzeError" class="error" x-text="analyzeError"></p>
+  </section>
+
+  <!-- FIELD MAPPINGS PANEL -->
+  <section class="panel" x-show="detectedFormat">
+    <h2>Field Mappings
+      <span class="badge" x-text="'Format: ' + detectedFormat"></span>
+    </h2>
+    <p class="hint">Confirm or adjust the EAT mapping for each extracted field. Fields marked &#9888; had no confident match.</p>
+    <table class="mapping-table">
+      <thead><tr><th>Field in Log</th><th>Sample Values</th><th>FortiSIEM EAT</th><th>Optional?</th></tr></thead>
+      <tbody>
+        <template x-for="(info, field) in fields" :key="field">
+          <tr :class="confirmedMappings[field] === '_skip' ? 'skipped' : ''">
+            <td x-text="field"></td>
+            <td class="values" x-text="(info.values || []).join(', ')"></td>
+            <td>
+              <select x-model="confirmedMappings[field]">
+                <option value="_skip">-- skip --</option>
+                <template x-for="sug in (suggestions[field] || [])" :key="sug.eat">
+                  <option :value="sug.eat"
+                          x-text="sug.eat + (sug.score < 30 ? ' \u26a0' : '')"></option>
+                </template>
+                <template x-for="eat in allEats" :key="eat">
+                  <option :value="eat" x-text="eat"></option>
+                </template>
+              </select>
+            </td>
+            <td x-text="info.optional ? 'optional' : ''"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+    <button @click="generateParser()" class="btn btn-primary">Generate Parser &#8594;</button>
+  </section>
+
+  <!-- GENERATED XML PANEL -->
+  <section class="panel" x-show="generatedXml">
+    <h2>Generated Parser XML</h2>
+    <div class="toolbar">
+      <button @click="validateXml()" class="btn btn-secondary">Validate</button>
+      <button @click="showTestModal = true" class="btn btn-secondary">Test</button>
+      <button @click="saveParser()" class="btn btn-secondary">Save</button>
+      <button @click="downloadXml()" class="btn btn-primary">Download .xml</button>
+      <span x-show="validateResult !== null"
+            :class="validateResult ? 'badge badge-ok' : 'badge badge-err'"
+            x-text="validateResult ? '\u2713 Valid XML' : '\u2717 ' + validateError"></span>
+    </div>
+    <pre class="xml-preview" x-text="generatedXml"></pre>
+  </section>
+
+  <!-- TEST MODAL -->
+  <div class="modal-overlay" x-show="showTestModal" @click.self="showTestModal = false">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h3>Parser Test Results</h3>
+        <button @click="showTestModal = false" class="btn btn-sm">&#10005;</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Run button + mode label -->
+        <div class="modal-toolbar">
+          <button @click="runTest()" class="btn btn-primary" :disabled="testing">
+            <span x-text="testing ? 'Testing...' : 'Run Test'"></span>
+          </button>
+          <span x-show="!testing && testMode === 'single'" class="badge">Single-parser mode</span>
+          <span x-show="!testing && testMode === 'library'" class="badge">Library mode &mdash; checking all enabled parsers</span>
+        </div>
+
+        <!-- SINGLE-PARSER MODE: simple field table per sample -->
+        <template x-if="testMode === 'single' && testResultsSingle.length > 0">
+          <div>
+            <template x-for="(result, i) in testResultsSingle" :key="i">
+              <div class="test-result">
+                <h4>
+                  <span x-text="'Sample ' + (i+1)"></span>
+                  <span :class="result.status === 'pass' ? 'badge badge-ok' : 'badge badge-err'"
+                        x-text="result.status === 'pass' ? 'PASS' : 'FAIL'"></span>
+                </h4>
+                <table class="result-table">
+                  <thead><tr><th>EAT</th><th>Value</th></tr></thead>
+                  <tbody>
+                    <template x-for="[k, v] in Object.entries(result.fields)" :key="k">
+                      <tr><td x-text="k"></td><td class="mono" x-text="v"></td></tr>
+                    </template>
+                    <tr x-show="Object.keys(result.fields).length === 0">
+                      <td colspan="2" class="hint">No fields extracted.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- LIBRARY MODE: per-sample summary + ranked parser table -->
+        <template x-if="testMode === 'library' && testResultsLibrary">
+          <div>
+            <!-- Global summary -->
+            <p class="summary-line">
+              Total enabled parsers in library:
+              <strong x-text="testResultsLibrary.total_enabled"></strong>
+            </p>
+
+            <template x-for="(sampleResult, si) in testResultsLibrary.per_sample" :key="si">
+              <div class="test-result">
+                <!-- Per-sample summary header -->
+                <h4>Sample <span x-text="si + 1"></span></h4>
+                <p class="summary-line">
+                  Checked: <strong x-text="testResultsLibrary.total_enabled"></strong>
+                  &nbsp;|&nbsp;
+                  Matched: <strong x-text="sampleResult.matched_count"></strong>
+                  &nbsp;|&nbsp;
+                  First match:
+                  <strong x-text="sampleResult.first_match || 'none'"></strong>
+                </p>
+
+                <!-- Per-parser ranked table -->
+                <table class="result-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Parser Name</th>
+                      <th>Vendor / Model</th>
+                      <th>Matched</th>
+                      <th>Primary</th>
+                      <th>Status</th>
+                      <th>eventType</th>
+                      <th>Severity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="p in sampleResult.parsers" :key="p.rank">
+                      <tr :class="!p.matched ? 'row-skip' : (p.primary ? 'row-primary' : '')">
+                        <td x-text="p.rank"></td>
+                        <td x-text="p.name"></td>
+                        <td x-text="p.vendor + ' / ' + p.model"></td>
+                        <td>
+                          <span x-show="p.matched" class="badge badge-ok">HIT</span>
+                          <span x-show="!p.matched" class="badge">&mdash;</span>
+                        </td>
+                        <td x-text="p.primary ? '\u2605' : ''"></td>
+                        <td>
+                          <span x-show="p.status === 'pass'" class="badge badge-ok">PASS</span>
+                          <span x-show="p.status === 'fail'" class="badge badge-err">FAIL</span>
+                          <span x-show="p.status === 'skip'" class="badge">skip</span>
+                        </td>
+                        <td class="mono" x-text="p.event_type || ''"></td>
+                        <td x-text="p.event_severity || ''"></td>
+                      </tr>
+                      <!-- Expandable field detail row for matched parsers -->
+                      <tr x-show="p.matched && Object.keys(p.fields).length > 0"
+                          class="row-detail">
+                        <td colspan="8">
+                          <details>
+                            <summary>Extracted fields (<span x-text="Object.keys(p.fields).length"></span>)</summary>
+                            <table class="detail-table">
+                              <tbody>
+                                <template x-for="[k, v] in Object.entries(p.fields)" :key="k">
+                                  <tr>
+                                    <td class="detail-key" x-text="k"></td>
+                                    <td class="mono" x-text="v"></td>
+                                  </tr>
+                                </template>
+                              </tbody>
+                            </table>
+                          </details>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+        </template>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- PARSER LIBRARY -->
+  <section class="panel">
+    <h2>Parser Library</h2>
+    <table class="library-table">
+      <thead><tr><th>Name</th><th>Vendor</th><th>Model</th><th>Source</th><th>Actions</th></tr></thead>
+      <tbody>
+        <template x-for="p in parserLibrary" :key="p.id">
+          <tr>
+            <td x-text="p.name"></td>
+            <td x-text="p.vendor"></td>
+            <td x-text="p.model"></td>
+            <td><span class="badge" x-text="p.source"></span></td>
+            <td>
+              <a :href="'/api/parsers/' + p.id + '/download'" class="btn btn-sm">Download</a>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </section>
+
+</div>
+
+<script>
+function studioApp() {
+  return {
+    // Metadata
+    meta: { name: '', scope: 'enabled', parser_type: 'User',
+            vendor: '', model: '', version: 'ANY', anchor: '' },
+    deviceTypes: [], vendors: [], filteredModels: [],
+
+    // Samples
+    samples: [''],
+
+    // Analysis results
+    analyzing: false, analyzeError: '',
+    detectedFormat: '', fields: {}, suggestions: {},
+
+    // Mappings
+    confirmedMappings: {},
+    allEats: [
+      'srcIpAddr','destIpAddr','srcHostName','destName','user','targetUser',
+      'msg','command','customer','domain','eventType','eventSeverity','eventTime',
+      'deviceTime','eventAction','procName','procId','parentProcName','parentProcId',
+      'fileName','filePath','hashMD5','hashSHA1','hashSHA256','ipProto',
+      'srcIpPort','destIpPort','sessionId','serviceName','virusName','threatLevel',
+      'policyName','ruleName','winEventId','connMode','authenMethod',
+    ],
+
+    // Generated XML
+    generatedXml: '',
+    validateResult: null, validateError: '',
+
+    // Test modal
+    showTestModal: false, testing: false,
+    testMode: '',                  // 'single' | 'library'
+    testResultsSingle: [],         // [{fields, status}] -- single-parser mode
+    testResultsLibrary: null,      // {total_enabled, per_sample:[...]} -- library mode
+
+    // Parser library
+    parserLibrary: [],
+
+    async init() {
+      await this.loadDeviceTypes();
+      await this.loadParserLibrary();
+    },
+
+    async loadDeviceTypes() {
+      const res = await fetch('/api/device-types');
+      this.deviceTypes = await res.json();
+      this.vendors = [...new Set(this.deviceTypes.map(d => d.vendor))].sort();
+    },
+
+    updateModels() {
+      this.filteredModels = this.deviceTypes
+        .filter(d => d.vendor === this.meta.vendor)
+        .map(d => d.model);
+      this.meta.model = '';
+    },
+
+    addSample() { this.samples.push(''); },
+    removeSample(i) { this.samples.splice(i, 1); },
+
+    async analyze() {
+      this.analyzing = true; this.analyzeError = '';
+      try {
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ samples: this.samples }),
+        });
+        const data = await res.json();
+        if (data.error) { this.analyzeError = data.error; return; }
+        this.detectedFormat = data.format;
+        this.fields = data.fields;
+        this.suggestions = data.mappings;
+        // Pre-fill confirmed mappings with top suggestion
+        this.confirmedMappings = {};
+        for (const [field, sugs] of Object.entries(data.mappings)) {
+          this.confirmedMappings[field] = sugs[0]?.eat || '_skip';
+        }
+      } finally { this.analyzing = false; }
+    },
+
+    async generateParser() {
+      const mappings = {};
+      for (const [f, eat] of Object.entries(this.confirmedMappings)) {
+        if (eat !== '_skip') mappings[f] = eat;
+      }
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          meta: this.meta, mappings,
+          format: this.detectedFormat, samples: this.samples
+        }),
+      });
+      const data = await res.json();
+      this.generatedXml = data.xml;
+      this.validateResult = null;
+    },
+
+    async validateXml() {
+      const res = await fetch('/api/validate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ xml: this.generatedXml }),
+      });
+      const data = await res.json();
+      this.validateResult = data.valid;
+      this.validateError = data.error || '';
+    },
+
+    async runTest() {
+      this.testing = true;
+      this.testMode = '';
+      this.testResultsSingle = [];
+      this.testResultsLibrary = null;
+      try {
+        // If generatedXml exists: single-parser mode; otherwise library mode.
+        const body = { samples: this.samples };
+        if (this.generatedXml) body.xml = this.generatedXml;
+        const res = await fetch('/api/test', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        this.testMode = data.mode;
+        if (data.mode === 'single') {
+          this.testResultsSingle = data.results;
+        } else {
+          this.testResultsLibrary = data;
+        }
+      } finally { this.testing = false; }
+    },
+
+    async saveParser() {
+      const res = await fetch('/api/parsers/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          ...this.meta, xml: this.generatedXml, samples: this.samples
+        }),
+      });
+      if (res.ok) {
+        await this.loadParserLibrary();
+        alert('Parser saved!');
+      }
+    },
+
+    downloadXml() {
+      const blob = new Blob([this.generatedXml], {type: 'application/xml'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (this.meta.name || 'parser') + '.xml';
+      a.click();
+    },
+
+    async syncFromDisk() {
+      const res = await fetch('/api/parsers/sync', { method: 'POST' });
+      const data = await res.json();
+      await this.loadParserLibrary();
+      alert(`Synced: ${data.imported} new parser(s) imported.`);
+    },
+
+    async loadParserLibrary() {
+      const res = await fetch('/api/parsers');
+      this.parserLibrary = await res.json();
+    },
+  };
+}
+</script>
+</body>
+</html>
