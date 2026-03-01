@@ -34,9 +34,9 @@
           <option value="System">System</option>
         </select>
       </label>
-      <label>Vendor
+      <label>Device Type
         <select x-model="meta.vendor" @change="updateModels()">
-          <option value="">-- select vendor --</option>
+          <option value="">-- select device type --</option>
           <template x-for="v in vendors" :key="v">
             <option :value="v" x-text="v"></option>
           </template>
@@ -199,7 +199,7 @@
                     <tr>
                       <th>#</th>
                       <th>Parser Name</th>
-                      <th>Vendor / Model</th>
+                      <th>Device Type / Model</th>
                       <th>Matched</th>
                       <th>Primary</th>
                       <th>Status</th>
@@ -277,7 +277,7 @@
               <option value="disabled">Disabled</option>
             </select>
           </label>
-          <label>Vendor
+          <label>Device Type
             <input type="text" x-model="editParser.vendor"/>
           </label>
           <label>Model
@@ -359,7 +359,7 @@
   <section class="panel">
     <h2>Parser Library</h2>
     <table class="library-table">
-      <thead><tr><th>Name</th><th>Vendor</th><th>Model</th><th>Source</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Device Type</th><th>Model</th><th>Source</th><th>Actions</th></tr></thead>
       <tbody>
         <template x-for="p in parserLibrary" :key="p.id">
           <tr>

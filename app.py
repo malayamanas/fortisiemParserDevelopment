@@ -1,10 +1,28 @@
 import os
+import re
 from flask import Flask, render_template, request, jsonify, send_file
 import io
 
 from parser_studio.db import (init_db, get_device_types, add_device_type,
                                save_parser, get_parsers, get_parser_by_id,
-                               update_parser, save_samples, get_samples)
+                               update_parser, save_samples, get_samples,
+                               sync_device_types)
+
+DEVICE_TYPES_FILE = "docs/SIEM_Event_Attributes/device_types.txt"
+
+
+def _load_device_types_from_file() -> list[tuple]:
+    """Parse device_types.txt — strip leading number, import full line as device type name."""
+    if not os.path.isfile(DEVICE_TYPES_FILE):
+        return []
+    seen, entries = set(), []
+    with open(DEVICE_TYPES_FILE) as f:
+        for line in f:
+            text = re.sub(r'^\d+\.\s*', '', line).strip()
+            if text and text not in seen:
+                seen.add(text)
+                entries.append((text, "ANY", "ANY"))
+    return entries
 from parser_studio.detector import detect_format
 from parser_studio.extractor import extract_fields
 from parser_studio.mapper import suggest_mappings
@@ -25,6 +43,7 @@ def startup():
     """Init DB and sync parsers on first request only."""
     if not hasattr(app, "_started"):
         init_db(DB_PATH)
+        sync_device_types(DB_PATH, _load_device_types_from_file())
         if os.path.isdir(PARSERS_DIR):
             sync_parsers(PARSERS_DIR, DB_PATH)
         app._started = True

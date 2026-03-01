@@ -117,6 +117,19 @@ def update_parser(db_path: str, parser_id: int, data: dict) -> None:
         if cur.rowcount == 0:
             raise ValueError(f"No parser with id={parser_id}")
 
+def sync_device_types(db_path: str, entries: list[tuple]) -> int:
+    """Insert (vendor, model, version) tuples not already present. Returns count inserted."""
+    with _conn(db_path) as conn:
+        existing = {(r[0], r[1]) for r in
+                    conn.execute("SELECT vendor, model FROM device_types").fetchall()}
+        new = [e for e in entries if (e[0], e[1]) not in existing]
+        if new:
+            conn.executemany(
+                "INSERT INTO device_types (vendor, model, version) VALUES (?,?,?)", new
+            )
+        return len(new)
+
+
 def save_samples(db_path: str, parser_id: int, samples: list[dict]) -> None:
     with _conn(db_path) as conn:
         conn.execute("DELETE FROM test_samples WHERE parser_id=?", (parser_id,))
