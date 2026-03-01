@@ -153,7 +153,10 @@ def api_test():
         return jsonify({"mode": "single", "results": results})
     else:
         # Library mode: rank all enabled parsers and return structured result
-        result = test_against_library(samples, DB_PATH)
+        # current_xml (optional) is prepended as a virtual entry so the editor's
+        # unsaved XML appears in results even before it is saved to the DB.
+        current_xml = (data.get("current_xml") or "").strip()
+        result = test_against_library(samples, DB_PATH, current_xml)
         return jsonify({"mode": "library", **result})
 
 

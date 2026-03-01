@@ -236,11 +236,12 @@
                     </thead>
                     <tbody>
                       <template x-for="p in sampleResult.parsers.filter(p => p.matched)" :key="p.rank">
-                        <tr :class="p.primary ? 'row-primary' : ''">
+                        <tr :class="p.primary ? 'row-primary' : (p.is_current ? 'row-current' : '')">
                           <td x-text="p.rank"></td>
                           <td>
                             <span x-text="p.name"></span>
                             <span x-show="p.primary" style="margin-left:.3rem;font-size:.7rem" class="badge badge-ok">primary</span>
+                            <span x-show="p.is_current && !p.primary" style="margin-left:.3rem;font-size:.7rem" class="badge">current</span>
                           </td>
                           <td x-text="p.vendor + ' / ' + p.model"></td>
                           <td class="mono" x-text="p.event_type || '—'"></td>
@@ -251,7 +252,7 @@
                   </table>
                 </template>
                 <template x-if="sampleResult.matched_count === 0">
-                  <p class="hint" style="font-size:.8rem">No other library parsers matched this sample.</p>
+                  <p class="hint" style="font-size:.8rem">No parsers (including current editor XML) matched this sample.</p>
                 </template>
               </div>
             </template>
@@ -869,7 +870,7 @@ function studioApp() {
             fetch('/api/test', {
               method: 'POST',
               headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({ samples: this.samples }),
+              body: JSON.stringify({ samples: this.samples, current_xml: this.generatedXml }),
             }),
           ]);
           const singleData = await singleRes.json();

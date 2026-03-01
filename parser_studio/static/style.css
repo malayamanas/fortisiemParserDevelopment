@@ -81,6 +81,8 @@ th:hover { background: #161b27; }
 
 /* Library mode row states */
 .row-primary td:first-child { font-weight: 700; color: #60a5fa; }
+.row-current td { background: rgba(251, 191, 36, .06); }
+.row-current td:first-child { color: #fbbf24; }
 .row-skip { opacity: .35; }
 .row-detail td { background: #161b27; padding: .4rem .75rem; }
 

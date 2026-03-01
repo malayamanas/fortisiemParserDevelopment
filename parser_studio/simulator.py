@@ -322,11 +322,15 @@ def simulate(xml_str: str, samples: list[str]) -> list[dict]:
     return results
 
 
-def test_against_library(samples: list[str], db_path: str) -> dict:
+def test_against_library(samples: list[str], db_path: str,
+                          current_xml: str = "") -> dict:
     """
     Library mode — replicates FortiSIEM parser selection:
     All enabled parsers are tested in DB order (ascending id).
     The FIRST parser whose recognizer matches is the "primary" winner.
+
+    If current_xml is provided it is prepended as a virtual "📝 Current Parser"
+    entry so the editor's unsaved XML is always visible in results.
 
     Returns:
     {
@@ -344,6 +348,7 @@ def test_against_library(samples: list[str], db_path: str) -> dict:
               "model":          str,
               "matched":        bool,
               "primary":        bool,
+              "is_current":     bool,
               "status":         "pass"|"fail"|"skip",
               "fields":         dict,
               "event_type":     str,
@@ -354,8 +359,15 @@ def test_against_library(samples: list[str], db_path: str) -> dict:
       ]
     }
     """
-    all_parsers = [p for p in get_parsers(db_path) if p["scope"] == "enabled"]
-    total_enabled = len(all_parsers)
+    db_parsers  = [p for p in get_parsers(db_path) if p["scope"] == "enabled"]
+    total_enabled = len(db_parsers)
+
+    # Prepend the virtual "current editor" parser so it always appears in results
+    virtual = []
+    if current_xml and current_xml.strip():
+        virtual = [{"name": "📝 Current Parser", "vendor": "", "model": "",
+                    "xml_content": current_xml, "_is_current": True}]
+    all_parsers = virtual + db_parsers
 
     per_sample = []
     for raw in samples:
@@ -364,13 +376,15 @@ def test_against_library(samples: list[str], db_path: str) -> dict:
         first_match   = None
 
         for rank, p in enumerate(all_parsers, start=1):
-            xml_str = p.get("xml_content") or ""
-            matched = _recognizer_matches(xml_str, raw) if xml_str else False
+            xml_str    = p.get("xml_content") or ""
+            is_current = bool(p.get("_is_current"))
+            matched    = _recognizer_matches(xml_str, raw) if xml_str else False
 
             if not matched:
                 parser_rows.append({
                     "rank": rank, "name": p["name"],
                     "vendor": p.get("vendor", ""), "model": p.get("model", ""),
+                    "is_current": is_current,
                     "matched": False, "primary": False,
                     "status": "skip", "fields": {},
                     "event_type": "", "event_severity": "",
@@ -388,6 +402,7 @@ def test_against_library(samples: list[str], db_path: str) -> dict:
                 "name":           p["name"],
                 "vendor":         p.get("vendor", ""),
                 "model":          p.get("model", ""),
+                "is_current":     is_current,
                 "matched":        True,
                 "primary":        is_primary,
                 "status":         sim["status"],
