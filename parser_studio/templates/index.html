@@ -186,8 +186,8 @@
           <button @click="runTest()" class="btn btn-primary" :disabled="testing">
             <span x-text="testing ? 'Testing...' : 'Run Test'"></span>
           </button>
-          <span x-show="!testing && testMode === 'single'" class="badge">Single-parser mode</span>
-          <span x-show="!testing && testMode === 'library'" class="badge">Library mode &mdash; checking all enabled parsers</span>
+          <span x-show="!testing && testMode === 'single'" class="badge">Current parser extraction</span>
+          <span x-show="!testing && testMode === 'library'" class="badge">Library mode &mdash; all enabled parsers</span>
         </div>
 
         <!-- SINGLE-PARSER MODE: simple field table per sample -->
@@ -211,6 +211,48 @@
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- LIBRARY MATCHES alongside single-parser mode -->
+        <template x-if="testMode === 'single' && testLibraryMatches">
+          <div style="margin-top:1.25rem">
+            <h4 style="margin-bottom:.5rem">
+              Also matched by library parsers
+              <span class="badge" x-text="testLibraryMatches.total_enabled + ' enabled'"></span>
+            </h4>
+            <template x-for="(sampleResult, si) in testLibraryMatches.per_sample" :key="si">
+              <div style="margin-bottom:.75rem">
+                <p class="summary-line" style="margin-bottom:.4rem">
+                  Sample <strong x-text="si + 1"></strong> —
+                  <strong x-text="sampleResult.matched_count"></strong> parser(s) matched
+                </p>
+                <template x-if="sampleResult.matched_count > 0">
+                  <table class="result-table" style="font-size:.8rem">
+                    <thead>
+                      <tr><th>#</th><th>Parser</th><th>Device Type</th><th>eventType</th><th>Severity</th></tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="p in sampleResult.parsers.filter(p => p.matched)" :key="p.rank">
+                        <tr :class="p.primary ? 'row-primary' : ''">
+                          <td x-text="p.rank"></td>
+                          <td>
+                            <span x-text="p.name"></span>
+                            <span x-show="p.primary" style="margin-left:.3rem;font-size:.7rem" class="badge badge-ok">primary</span>
+                          </td>
+                          <td x-text="p.vendor + ' / ' + p.model"></td>
+                          <td class="mono" x-text="p.event_type || '—'"></td>
+                          <td x-text="p.event_severity || '—'"></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </template>
+                <template x-if="sampleResult.matched_count === 0">
+                  <p class="hint" style="font-size:.8rem">No other library parsers matched this sample.</p>
+                </template>
               </div>
             </template>
           </div>
@@ -647,6 +689,7 @@ function studioApp() {
     testMode: '',                  // 'single' | 'library'
     testResultsSingle: [],         // [{fields, status}] -- single-parser mode
     testResultsLibrary: null,      // {total_enabled, per_sample:[...]} -- library mode
+    testLibraryMatches: null,      // library results alongside single-parser mode
 
     // Parser library
     parserLibrary: [],
@@ -812,20 +855,36 @@ function studioApp() {
       this.testMode = '';
       this.testResultsSingle = [];
       this.testResultsLibrary = null;
+      this.testLibraryMatches = null;
       try {
-        // If generatedXml exists: single-parser mode; otherwise library mode.
-        const body = { samples: this.samples };
-        if (this.generatedXml) body.xml = this.generatedXml;
-        const res = await fetch('/api/test', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        this.testMode = data.mode;
-        if (data.mode === 'single') {
-          this.testResultsSingle = data.results;
+        if (this.generatedXml) {
+          // Single-parser mode + parallel library check
+          const [singleRes, libRes] = await Promise.all([
+            fetch('/api/test', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ samples: this.samples, xml: this.generatedXml }),
+            }),
+            fetch('/api/test', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ samples: this.samples }),
+            }),
+          ]);
+          const singleData = await singleRes.json();
+          const libData    = await libRes.json();
+          this.testMode = 'single';
+          this.testResultsSingle = singleData.results || [];
+          this.testLibraryMatches = libData;
         } else {
+          // Library mode only
+          const res = await fetch('/api/test', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ samples: this.samples }),
+          });
+          const data = await res.json();
+          this.testMode = 'library';
           this.testResultsLibrary = data;
         }
       } finally { this.testing = false; }
