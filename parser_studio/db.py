@@ -52,13 +52,22 @@ def init_db(db_path: str) -> None:
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE IF NOT EXISTS test_samples (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                parser_id  INTEGER REFERENCES parsers(id) ON DELETE CASCADE,
-                label      TEXT,
-                raw_log    TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                parser_id   INTEGER REFERENCES parsers(id) ON DELETE CASCADE,
+                sequence_no INTEGER NOT NULL DEFAULT 0,
+                label       TEXT,
+                raw_log     TEXT NOT NULL,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        # Migration: add sequence_no to existing test_samples tables
+        try:
+            conn.execute(
+                "ALTER TABLE test_samples ADD COLUMN sequence_no INTEGER NOT NULL DEFAULT 0"
+            )
+        except Exception:
+            pass  # column already exists
+
         existing = conn.execute("SELECT COUNT(*) FROM device_types").fetchone()[0]
         if existing == 0:
             conn.executemany(
@@ -131,18 +140,25 @@ def sync_device_types(db_path: str, entries: list[tuple]) -> int:
 
 
 def save_samples(db_path: str, parser_id: int, samples: list[dict]) -> None:
+    """Replace all test samples for parser_id with the given list.
+
+    sequence_no is set to the list index (0-based) so that retrieval order
+    always matches the order they were provided, regardless of auto-increment IDs.
+    """
     with _conn(db_path) as conn:
         conn.execute("DELETE FROM test_samples WHERE parser_id=?", (parser_id,))
         conn.executemany(
-            "INSERT INTO test_samples (parser_id, label, raw_log) VALUES (?,?,?)",
-            [(parser_id, s.get("label", f"Sample {i+1}"), s["raw_log"])
+            "INSERT INTO test_samples (parser_id, sequence_no, label, raw_log) VALUES (?,?,?,?)",
+            [(parser_id, i, s.get("label", f"Sample {i+1}"), s["raw_log"])
              for i, s in enumerate(samples)]
         )
 
 def get_samples(db_path: str, parser_id: int) -> list[dict]:
+    """Return test samples for parser_id ordered by sequence_no (then id for legacy rows)."""
     with _conn(db_path) as conn:
         rows = conn.execute(
-            "SELECT * FROM test_samples WHERE parser_id=? ORDER BY id", (parser_id,)
+            "SELECT * FROM test_samples WHERE parser_id=? ORDER BY sequence_no, id",
+            (parser_id,)
         ).fetchall()
         return [dict(r) for r in rows]
 
