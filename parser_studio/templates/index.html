@@ -380,16 +380,27 @@
             <input type="text" x-model="addParser.name" placeholder="MyParser"/>
           </label>
           <label>Scope
-            <select x-model="addParser.scope">
+            <select x-model="addParser.scope" :disabled="!addCanEnable">
               <option value="enabled">Enabled</option>
               <option value="disabled">Disabled</option>
             </select>
+            <span x-show="!addCanEnable" style="font-size:.75rem;color:#9ca3af;display:block;margin-top:.2rem">Validate + Run Test must pass to enable</span>
           </label>
           <label>Device Type
-            <input type="text" x-model="addParser.vendor" placeholder="e.g. Fortinet FortiOS"/>
+            <select x-model="addParser.vendor" @change="updateAddModels()">
+              <option value="">-- select device type --</option>
+              <template x-for="v in vendors" :key="v">
+                <option :value="v" x-text="v"></option>
+              </template>
+            </select>
           </label>
           <label>Model
-            <input type="text" x-model="addParser.model" placeholder="e.g. FortiOS"/>
+            <select x-model="addParser.model">
+              <option value="">-- select model --</option>
+              <template x-for="m in addFilteredModels" :key="m">
+                <option :value="m" x-text="m"></option>
+              </template>
+            </select>
           </label>
           <label>Version
             <input type="text" x-model="addParser.version" placeholder="ANY"/>
@@ -406,6 +417,9 @@
 
         <!-- Toolbar -->
         <div class="modal-toolbar">
+          <button @click="generateAdd()" class="btn btn-secondary" :disabled="addGenerating">
+            <span x-text="addGenerating ? 'Generating...' : '\u2728 Generate XML'"></span>
+          </button>
           <button @click="validateAdd()" class="btn btn-secondary">Validate</button>
           <button @click="runAddTest()" class="btn btn-secondary" :disabled="addTesting">
             <span x-text="addTesting ? 'Testing...' : 'Run Test'"></span>
@@ -553,12 +567,20 @@ function studioApp() {
 
     // Add Parser modal
     showAddModal: false,
-    addParser: { name: '', scope: 'enabled', vendor: '', model: '', version: 'ANY', xml_content: '' },
+    addParser: { name: '', scope: 'disabled', vendor: '', model: '', version: 'ANY', xml_content: '' },
     addSamples: [''],
     addValidateResult: null,
     addValidateError: '',
     addTestResults: [],
     addTesting: false,
+    addGenerating: false,
+    addFilteredModels: [],
+
+    get addCanEnable() {
+      return this.addValidateResult === true &&
+             this.addTestResults.length > 0 &&
+             this.addTestResults.every(r => r.status === 'pass');
+    },
 
     async init() {
       await this.loadDeviceTypes();
@@ -582,6 +604,13 @@ function studioApp() {
       this.editFilteredModels = this.deviceTypes
         .filter(d => d.vendor === this.editParser.vendor)
         .map(d => d.model);
+    },
+
+    updateAddModels() {
+      this.addFilteredModels = this.deviceTypes
+        .filter(d => d.vendor === this.addParser.vendor)
+        .map(d => d.model);
+      this.addParser.model = '';
     },
 
     addSample() { this.samples.push(''); },
@@ -764,24 +793,26 @@ function studioApp() {
     },
 
     openAddModal() {
-      this.addParser = { name: '', scope: 'enabled', vendor: '', model: '', version: 'ANY', xml_content: '' };
+      this.addParser = { name: '', scope: 'disabled', vendor: '', model: '', version: 'ANY', xml_content: '' };
       this.addSamples = [''];
       this.addValidateResult = null;
       this.addValidateError = '';
       this.addTestResults = [];
       this.addTesting = false;
+      this.addGenerating = false;
+      this.addFilteredModels = [];
       this.showAddModal = true;
     },
 
     async saveAdd() {
-      if (!this.addParser.name.trim()) { alert('Name is required.'); return; }
-      if (!this.addParser.xml_content.trim()) { alert('XML is required.'); return; }
+      if (!this.addParser.xml_content.trim()) { alert('Parser XML is required.'); return; }
+      const name = this.addParser.name.trim() || 'CustomParser';
       try {
         const res = await fetch('/api/parsers/save', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
-            name:        this.addParser.name,
+            name:        name,
             scope:       this.addParser.scope,
             parser_type: 'User',
             vendor:      this.addParser.vendor,
@@ -816,7 +847,7 @@ function studioApp() {
       try {
         const samples = this.addSamples.filter(s => s.trim());
         if (!samples.length) { alert('Add at least one sample log line.'); return; }
-        if (!this.addParser.xml_content.trim()) { alert('Paste parser XML first.'); return; }
+        if (!this.addParser.xml_content.trim()) { alert('Paste or generate parser XML first.'); return; }
         const res = await fetch('/api/test', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
@@ -827,6 +858,47 @@ function studioApp() {
       } catch (e) {
         alert(`Test failed: ${e.message}`);
       } finally { this.addTesting = false; }
+    },
+
+    async generateAdd() {
+      const samples = this.addSamples.filter(s => s.trim());
+      if (!samples.length) { alert('Add at least one sample log line.'); return; }
+      this.addGenerating = true;
+      this.addValidateResult = null;
+      this.addTestResults = [];
+      try {
+        const analyzeRes = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ samples }),
+        });
+        const analyzeData = await analyzeRes.json();
+        if (analyzeData.error) { alert('Analyze failed: ' + analyzeData.error); return; }
+        const mappings = {};
+        for (const [field, sugs] of Object.entries(analyzeData.mappings)) {
+          if (sugs[0]?.eat && sugs[0].eat !== '_skip') mappings[field] = sugs[0].eat;
+        }
+        const genRes = await fetch('/api/generate', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            meta: {
+              name:    this.addParser.name || 'CustomParser',
+              vendor:  this.addParser.vendor,
+              model:   this.addParser.model,
+              version: this.addParser.version || 'ANY',
+              anchor:  '',
+            },
+            mappings,
+            format:  analyzeData.format,
+            samples,
+          }),
+        });
+        const genData = await genRes.json();
+        this.addParser.xml_content = genData.xml;
+      } catch (e) {
+        alert('Generate failed: ' + e.message);
+      } finally { this.addGenerating = false; }
     },
   };
 }
