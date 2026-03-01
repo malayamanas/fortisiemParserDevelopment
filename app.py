@@ -214,15 +214,24 @@ def api_download_parser(pid: int):
     p = get_parser_by_id(DB_PATH, pid)
     if not p:
         return jsonify({"error": "Not found"}), 404
-    # Reconstruct the full <eventParser> document from stored metadata + fragment
+    # Reconstruct the full <eventParser> document from stored metadata + fragment.
+    # Only include <deviceType> when vendor and model are real values — omit it
+    # when they are "Unknown" or blank (e.g. parsers imported from fragments).
+    vendor  = (p.get("vendor")  or "").strip()
+    model   = (p.get("model")   or "").strip()
+    version = (p.get("version") or "ANY").strip()
+    known   = vendor and vendor != "Unknown" and model and model != "Unknown"
+    device_type_block = (
+        f'  <deviceType>\n'
+        f'    <Vendor>{vendor}</Vendor>\n'
+        f'    <Model>{model}</Model>\n'
+        f'    <Version>{version}</Version>\n'
+        f'  </deviceType>\n'
+    ) if known else ""
     full_xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         f'<eventParser name="{p["name"]}">\n'
-        '  <deviceType>\n'
-        f'    <Vendor>{p["vendor"] or "Unknown"}</Vendor>\n'
-        f'    <Model>{p["model"] or "Unknown"}</Model>\n'
-        f'    <Version>{p["version"] or "ANY"}</Version>\n'
-        '  </deviceType>\n'
+        f'{device_type_block}'
         f'{p["xml_content"] or ""}\n'
         '</eventParser>\n'
     )
