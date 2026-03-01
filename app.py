@@ -1,5 +1,8 @@
 import os
 import re
+import json
+import shutil
+import subprocess
 from flask import Flask, render_template, request, jsonify, send_file
 import io
 
@@ -86,7 +89,9 @@ def api_analyze():
 
     fmt    = detect_format(samples)
     fields = extract_fields(samples, fmt)
-    mappings = suggest_mappings(list(fields.keys()))
+    eat_rows = get_event_attributes(DB_PATH)
+    field_values = {f: info.get("values", []) for f, info in fields.items()}
+    mappings = suggest_mappings(list(fields.keys()), eat_rows, field_values)
     matrix = build_token_matrix(samples, fmt)
 
     return jsonify({
@@ -276,6 +281,83 @@ def api_eat_value_types():
 @app.route("/api/eat/names", methods=["GET"])
 def api_eat_names():
     return jsonify(get_eat_names(DB_PATH))
+
+
+def _claude_binary() -> str | None:
+    """Return path to the claude CLI binary, or None if unavailable."""
+    # Refuse to nest inside an active Claude Code session
+    if os.environ.get("CLAUDECODE") or os.environ.get("CLAUDE_CODE_ENTRYPOINT"):
+        return None
+    return shutil.which("claude")
+
+
+@app.route("/api/ai-suggest-eat", methods=["GET"])
+def api_ai_suggest_eat_probe():
+    """Probe endpoint: returns {"available": bool}."""
+    return jsonify({"available": _claude_binary() is not None})
+
+
+@app.route("/api/ai-suggest-eat", methods=["POST"])
+def api_ai_suggest_eat():
+    """Ask the claude CLI to pick the best EAT for a single field."""
+    claude = _claude_binary()
+    if not claude:
+        return jsonify({"error": "claude CLI not available"}), 503
+
+    data = request.get_json(force=True)
+    field = (data.get("field") or "").strip()
+    values = data.get("values") or []
+    candidates = data.get("candidates") or []
+
+    if not field:
+        return jsonify({"error": "field is required"}), 400
+
+    # Top 20 candidates by name for context
+    all_candidates = candidates[:20]
+
+    prompt = (
+        "You are a FortiSIEM EAT mapping expert. Reply with ONLY valid JSON, no markdown.\n\n"
+        f"Field name: {field}\n"
+        f"Sample values: {json.dumps(values[:10])}\n"
+        f"Top programmatic candidates: {json.dumps(candidates[:5])}\n"
+        f"Full candidate list (pick from these only): {json.dumps(all_candidates)}\n\n"
+        'Reply format: {"eat": "<name>", "reason": "<one sentence max>"}'
+    )
+
+    try:
+        result = subprocess.run(
+            [claude, "-p", "--output-format", "json", prompt],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode != 0:
+            return jsonify({"error": f"claude exited {result.returncode}",
+                            "detail": result.stderr[:500]}), 502
+
+        # claude --output-format json wraps output; try to extract inner JSON
+        raw = result.stdout.strip()
+        # Try to parse the outer wrapper ({"type":"result","result":"..."})
+        try:
+            outer = json.loads(raw)
+            inner_text = outer.get("result") or raw
+        except (json.JSONDecodeError, AttributeError):
+            inner_text = raw
+
+        # Extract the first JSON object from inner_text
+        match = re.search(r'\{[^{}]*"eat"[^{}]*\}', inner_text, re.DOTALL)
+        if match:
+            payload = json.loads(match.group(0))
+        else:
+            payload = json.loads(inner_text)
+
+        return jsonify({
+            "eat": payload.get("eat", ""),
+            "reason": payload.get("reason", ""),
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "claude timed out"}), 504
+    except (json.JSONDecodeError, ValueError) as e:
+        return jsonify({"error": f"Failed to parse claude response: {e}",
+                        "raw": result.stdout[:500] if 'result' in dir() else ""}), 502
 
 
 if __name__ == "__main__":

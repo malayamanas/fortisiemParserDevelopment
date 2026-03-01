@@ -125,16 +125,28 @@
             <td x-text="field"></td>
             <td class="values" x-text="(info.values || []).join(', ')"></td>
             <td>
-              <select x-model="confirmedMappings[field]">
-                <option value="_skip">-- skip --</option>
-                <template x-for="sug in (suggestions[field] || [])" :key="sug.eat">
-                  <option :value="sug.eat"
-                          x-text="sug.eat + (sug.score < 30 ? ' \u26a0' : '')"></option>
-                </template>
-                <template x-for="eat in allEats" :key="eat">
-                  <option :value="eat" x-text="eat"></option>
-                </template>
-              </select>
+              <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">
+                <select x-model="confirmedMappings[field]">
+                  <option value="_skip">-- skip --</option>
+                  <template x-for="sug in (suggestions[field] || [])" :key="sug.eat">
+                    <option :value="sug.eat"
+                            x-text="sug.eat + (sug.score < 30 ? ' \u26a0' : '')"></option>
+                  </template>
+                  <template x-for="eat in allEats" :key="eat">
+                    <option :value="eat" x-text="eat"></option>
+                  </template>
+                </select>
+                <span x-show="suggestions[field]?.[0]?.confidence === 'low'"
+                      class="badge badge-err" style="font-size:.7rem">low confidence</span>
+                <button x-show="aiSuggestAvailable && suggestions[field]?.[0]?.confidence === 'low'"
+                        @click="aiSuggestField(field)"
+                        :disabled="aiSuggesting[field]"
+                        class="btn btn-sm"
+                        :title="_aiReasons?.[field] || 'Ask AI for a better match'"
+                        style="padding:.15rem .4rem;font-size:.75rem">
+                  <span x-text="aiSuggesting[field] ? '...' : '\u2728'"></span>
+                </button>
+              </div>
             </td>
             <td x-text="info.optional ? 'optional' : ''"></td>
           </tr>
@@ -156,7 +168,8 @@
             :class="validateResult ? 'badge badge-ok' : 'badge badge-err'"
             x-text="validateResult ? '\u2713 Valid XML' : '\u2717 ' + validateError"></span>
     </div>
-    <pre class="xml-preview" x-text="generatedXml"></pre>
+    <textarea class="xml-preview" x-model="generatedXml" rows="20"
+              style="width:100%;resize:vertical;font-family:monospace"></textarea>
   </section>
 
   <!-- TEST MODAL -->
@@ -613,6 +626,10 @@ function studioApp() {
     detectedFormat: '', fields: {}, suggestions: {},
     tokenMatrix: [], sampleCount: 0,
 
+    // AI EAT suggestion
+    aiSuggestAvailable: false,
+    aiSuggesting: {},
+
     // Mappings
     confirmedMappings: {},
     allEats: [],
@@ -667,6 +684,41 @@ function studioApp() {
       await this.loadEatNames();
       await this.loadEatValueTypes();
       await this.searchEat();
+      await this.probeAiSuggest();
+    },
+
+    async probeAiSuggest() {
+      try {
+        const res = await fetch('/api/ai-suggest-eat');
+        const data = await res.json();
+        this.aiSuggestAvailable = !!data.available;
+      } catch (e) {
+        this.aiSuggestAvailable = false;
+      }
+    },
+
+    async aiSuggestField(field) {
+      this.aiSuggesting = {...this.aiSuggesting, [field]: true};
+      try {
+        const res = await fetch('/api/ai-suggest-eat', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            field,
+            values: this.fields[field]?.values || [],
+            candidates: (this.suggestions[field] || []).map(s => s.eat),
+          }),
+        });
+        const data = await res.json();
+        if (data.eat) {
+          this.confirmedMappings[field] = data.eat;
+          if (data.reason) this._aiReasons = {...(this._aiReasons||{}), [field]: data.reason};
+        }
+      } catch (e) {
+        console.error('AI suggest failed:', e);
+      } finally {
+        this.aiSuggesting = {...this.aiSuggesting, [field]: false};
+      }
     },
 
     async loadDeviceTypes() {
