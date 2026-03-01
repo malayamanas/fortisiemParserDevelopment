@@ -278,10 +278,20 @@
             </select>
           </label>
           <label>Device Type
-            <input type="text" x-model="editParser.vendor"/>
+            <select x-model="editParser.vendor" @change="updateEditModels()">
+              <option value="">-- select device type --</option>
+              <template x-for="v in vendors" :key="v">
+                <option :value="v" x-text="v"></option>
+              </template>
+            </select>
           </label>
           <label>Model
-            <input type="text" x-model="editParser.model"/>
+            <select x-model="editParser.model">
+              <option value="">-- select model --</option>
+              <template x-for="m in editFilteredModels" :key="m">
+                <option :value="m" x-text="m"></option>
+              </template>
+            </select>
           </label>
           <label>Version
             <input type="text" x-model="editParser.version"/>
@@ -522,6 +532,7 @@ function studioApp() {
     // Edit modal
     showEditModal: false,
     editParser: { id: null, name: '', scope: 'enabled', vendor: '', model: '', version: 'ANY', xml_content: '' },
+    editFilteredModels: [],
     editSamples: [],
     editValidateResult: null,
     editValidateError: '',
@@ -553,6 +564,12 @@ function studioApp() {
         .filter(d => d.vendor === this.meta.vendor)
         .map(d => d.model);
       this.meta.model = '';
+    },
+
+    updateEditModels() {
+      this.editFilteredModels = this.deviceTypes
+        .filter(d => d.vendor === this.editParser.vendor)
+        .map(d => d.model);
     },
 
     addSample() { this.samples.push(''); },
@@ -671,6 +688,7 @@ function studioApp() {
       if (!res.ok) { alert(`Failed to load parser: ${res.status}`); return; }
       const data = await res.json();
       this.editParser = data.parser;
+      this.updateEditModels();
       this.editSamples = data.samples.length
         ? data.samples.map(s => s.raw_log)
         : [''];
