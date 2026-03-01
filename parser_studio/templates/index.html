@@ -558,6 +558,7 @@ function studioApp() {
 
     async openEditModal(id) {
       const res = await fetch(`/api/parsers/${id}`);
+      if (!res.ok) { alert(`Failed to load parser: ${res.status}`); return; }
       const data = await res.json();
       this.editParser = data.parser;
       this.editSamples = data.samples.length

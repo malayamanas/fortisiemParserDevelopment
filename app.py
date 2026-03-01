@@ -177,7 +177,7 @@ def api_update_parser(pid: int):
         })
     except ValueError:
         return jsonify({"error": "Not found"}), 404
-    if data.get("samples"):
+    if "samples" in data:
         save_samples(DB_PATH, pid,
                      [{"raw_log": s, "label": f"Sample {i+1}"}
                       for i, s in enumerate(data["samples"])])

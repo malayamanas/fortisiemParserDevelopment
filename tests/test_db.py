@@ -63,6 +63,8 @@ def test_update_parser(tmp_db):
     assert p["scope"] == "disabled"
     assert p["vendor"] == "X"
     assert p["xml_content"] == "<new/>"
+    assert p["parser_type"] == "User"   # intentionally not updatable
+    assert p["source"] == "studio"      # intentionally not updatable
 
 def test_update_parser_not_found(tmp_db):
     init_db(tmp_db)
