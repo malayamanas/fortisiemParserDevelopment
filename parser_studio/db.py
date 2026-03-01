@@ -100,14 +100,22 @@ def get_parser_by_id(db_path: str, parser_id: int) -> dict | None:
         return dict(row) if row else None
 
 def update_parser(db_path: str, parser_id: int, data: dict) -> None:
+    """Update parser metadata and xml_content in the DB.
+
+    Required keys in data: name, scope, vendor, model, version, xml_content.
+    Raises ValueError if no parser with parser_id exists.
+    Note: parser_type, source, file_path are intentionally not updated.
+    """
     with _conn(db_path) as conn:
-        conn.execute(
+        cur = conn.execute(
             """UPDATE parsers
                SET name=:name, scope=:scope, vendor=:vendor, model=:model,
                    version=:version, xml_content=:xml_content
                WHERE id=:id""",
             {**data, "id": parser_id}
         )
+        if cur.rowcount == 0:
+            raise ValueError(f"No parser with id={parser_id}")
 
 def save_samples(db_path: str, parser_id: int, samples: list[dict]) -> None:
     with _conn(db_path) as conn:

@@ -1,5 +1,5 @@
 import pytest
-from parser_studio.db import init_db, add_device_type, get_device_types, save_parser, get_parsers, get_parser_by_id
+from parser_studio.db import init_db, add_device_type, get_device_types, save_parser, get_parsers, get_parser_by_id, update_parser
 
 def test_init_creates_tables(tmp_db):
     init_db(tmp_db)
@@ -47,7 +47,6 @@ def test_get_parser_by_id(tmp_db):
     assert p["xml_content"] == "<eventParser/>"
 
 def test_update_parser(tmp_db):
-    from parser_studio.db import update_parser
     init_db(tmp_db)
     pid = save_parser(tmp_db, {
         "name": "Original", "scope": "enabled", "parser_type": "User",
@@ -64,3 +63,11 @@ def test_update_parser(tmp_db):
     assert p["scope"] == "disabled"
     assert p["vendor"] == "X"
     assert p["xml_content"] == "<new/>"
+
+def test_update_parser_not_found(tmp_db):
+    init_db(tmp_db)
+    with pytest.raises(ValueError, match="No parser with id=999"):
+        update_parser(tmp_db, 999, {
+            "name": "X", "scope": "enabled", "vendor": "V",
+            "model": "M", "version": "ANY", "xml_content": "<x/>",
+        })
