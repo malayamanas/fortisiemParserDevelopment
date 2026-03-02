@@ -1,6 +1,15 @@
 import re
 
 
+def _has_syslog_pri(samples: list[str]) -> bool:
+    """Return True if >=60% of non-empty samples start with a syslog PRI tag <NNN>."""
+    non_empty = [s for s in samples if s.strip()]
+    if not non_empty:
+        return False
+    matches = sum(1 for s in non_empty if re.match(r"^<\d{1,3}>", s))
+    return (matches / len(non_empty)) >= 0.6
+
+
 def _safe_comment(text: str) -> str:
     """Ensure comment text never contains '--'."""
     return text.replace("--", "==")
@@ -74,8 +83,9 @@ def generate_parser(meta: dict, mappings: dict[str, str],
 
     # eventFormatRecognizer pattern
     if fmt.startswith("syslog"):
+        pri_prefix = "<:gPatSyslogPRI>\\s*" if _has_syslog_pri(samples) else ""
         recognizer = (
-            f"<:gPatMon>\\s+<:gPatDay>\\s+<:gPatTime>\\s+<:gPatYear>"
+            f"{pri_prefix}<:gPatMon>\\s+<:gPatDay>\\s+<:gPatTime>\\s+<:gPatYear>"
             f"\\s+<:gPatStr>\\s+<:gPatIpAddr>\\s+{anchor}"
         )
     else:
@@ -83,10 +93,11 @@ def generate_parser(meta: dict, mappings: dict[str, str],
 
     # Step-1 regex to extract the body variable
     if fmt.startswith("syslog"):
+        pri_prefix = "<:gPatSyslogPRI>\\s*" if _has_syslog_pri(samples) else ""
         header_regex = (
-            f"<_mon:gPatMon>\\s+<_day:gPatDay>\\s+<_time:gPatTime>"
+            f"{pri_prefix}<_mon:gPatMon>\\s+<_day:gPatDay>\\s+<_time:gPatTime>"
             f"\\s+<_year:gPatYear>\\s+<_devHost:gPatStr>\\s+<:gPatIpAddr>"
-            f"\\s+{anchor}[:\\s]+<{body_var}:gPatMesgBody>"
+            f"\\s+{anchor}\\s+<{body_var}:gPatMesgBody>"
         )
     else:
         header_regex = f"<{body_var}:gPatMesgBody>"

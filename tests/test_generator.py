@@ -79,3 +79,34 @@ def test_has_event_severity_default():
 def test_has_event_type():
     xml_str = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", [])
     assert 'attr="eventType"' in xml_str
+
+
+_APACHE_SAMPLES = [
+    '<142>Sep 17 13:27:37 example.com ApacheLog   192.168.20.35 - - [17/Sep/2009:13:27:37 -0700] "GET /icons/apache_pb2.gif HTTP/1.1" 200 2414',
+    '<142>Sep 17 13:27:37 example.com ApacheLog 0  192.168.20.35 - - [17/Sep/2009:13:27:37 -0700] "GET /icons/apache_pb2.gif HTTP/1.1" 200 2414',
+    '<182>Mar 22 19:00:14 lab1.example.com Apache_ErrorLog: [Tue Mar 22 16:17:41.711593 2022] [proxy_http:error]',
+]
+
+def test_syslog_pri_prepended_when_samples_have_pri():
+    xml_str = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", _APACHE_SAMPLES)
+    assert "gPatSyslogPRI" in xml_str
+
+def test_syslog_pri_not_added_without_pri_samples():
+    no_pri = ["Jul 23 10:05:15 2025 fw01 192.168.1.1 srcip=10.0.0.5"]
+    xml_str = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", no_pri)
+    assert "gPatSyslogPRI" not in xml_str
+
+def test_header_regex_no_colon_space_separator():
+    r"""[:\s]+ must not appear in the header_regex - it blocks body capture."""
+    xml_str = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", [])
+    assert "[:\\s]+" not in xml_str and "[:\\\\s]+" not in xml_str
+
+def test_pri_in_both_recognizer_and_header_regex():
+    xml_str = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+text", _APACHE_SAMPLES)
+    lines = xml_str.splitlines()
+    recognizer_line = next(l for l in lines if "eventFormatRecognizer" in l)
+    assert "gPatSyslogPRI" in recognizer_line
+    # Header regex is inside a CDATA in the first collectFieldsByRegex
+    header_regex_line = next(l for l in lines if "collectFieldsByRegex" in l or "gPatMon" in l)
+    # gPatSyslogPRI must appear before gPatMon in the output
+    assert xml_str.index("gPatSyslogPRI") < xml_str.index("gPatMon")
