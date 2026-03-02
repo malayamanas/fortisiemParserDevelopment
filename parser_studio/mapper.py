@@ -155,6 +155,21 @@ def suggest_mappings(
                 scored.append({"eat": row["name"], "score": s,
                                "confidence": _confidence(s)})
             scored.sort(key=lambda x: -x["score"])
+
+            # If SYNONYMS has an authoritative mapping, force it to position 0.
+            # This beats any false-positive that accumulated equal or higher bonus
+            # points from display-name / description substring matches.
+            if norm in SYNONYMS:
+                syn_eat = SYNONYMS[norm]
+                idx = next((i for i, e in enumerate(scored) if e["eat"] == syn_eat), None)
+                if idx is not None:
+                    scored.insert(0, scored.pop(idx))
+                    scored[0]["score"] = 100
+                    scored[0]["confidence"] = "high"
+                else:
+                    # EAT not in DB JSON but is a known valid FortiSIEM attribute
+                    scored.insert(0, {"eat": syn_eat, "score": 100, "confidence": "high"})
+
             suggestions = scored[:5]
         else:
             # Legacy path: synonym lookup + ALL_EATS

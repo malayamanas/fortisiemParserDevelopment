@@ -66,8 +66,17 @@ SYNONYMS: dict[str, str] = {
     # === Network ===
     "ipproto": "ipProto", "proto": "ipProto", "protocol": "ipProto",
     "srcport": "srcIpPort", "sourceport": "srcIpPort", "sport": "srcIpPort",
+    "spt": "srcIpPort",                                                   # CEF
     "destport": "destIpPort", "dstport": "destIpPort", "dport": "destIpPort",
-    "destinationport": "destIpPort",
+    "destinationport": "destIpPort", "dpt": "destIpPort",                # CEF
+
+    # === CEF / Syslog-KV short field names ===
+    "src": "srcIpAddr",                                                   # CEF
+    "act": "eventAction",                                                 # CEF
+    "shost": "srcHostName", "suser": "user",                             # CEF
+    "dhost": "destName", "duser": "targetUser",                          # CEF
+    "fname": "fileName", "fsize": "fileSize",                            # CEF
+    "in": "recvBytes", "out": "sentBytes",                               # CEF bytes
 
     # === Action ===
     "eventaction": "eventAction", "action": "eventAction",

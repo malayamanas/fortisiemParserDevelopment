@@ -813,7 +813,10 @@ function studioApp() {
         // Pre-fill confirmed mappings with top suggestion
         this.confirmedMappings = {};
         for (const [field, sugs] of Object.entries(data.mappings)) {
-          this.confirmedMappings[field] = sugs[0]?.eat || '_skip';
+          const top = sugs?.[0];
+          const isPositional = field.startsWith('_token');
+          this.confirmedMappings[field] =
+            (!isPositional && top?.score > 0 ? top.eat : null) || '_skip';
         }
       } finally { this.analyzing = false; }
     },
