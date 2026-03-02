@@ -810,7 +810,10 @@ function studioApp() {
         this.suggestions = data.mappings;
         this.tokenMatrix = data.token_matrix || [];
         this.sampleCount = data.sample_count || 0;
-        // Pre-fill confirmed mappings with top suggestion
+        // Wait for Alpine to render x-for options before setting confirmedMappings,
+        // otherwise x-model on <select> tries to set .value before options exist
+        // and silently falls back to the first option (_skip).
+        await this.$nextTick();
         this.confirmedMappings = {};
         for (const [field, sugs] of Object.entries(data.mappings)) {
           const top = sugs?.[0];
