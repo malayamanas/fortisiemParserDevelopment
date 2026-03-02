@@ -37,7 +37,9 @@ def test_analyze_samples(page, no_pause, live_server):
     rows = page.locator("table.mapping-table tbody tr").all()
     assert len(rows) >= 1, "Expected at least one field mapping row"
 
-    # Confidence badges must be present (high / medium / low)
-    badges = page.locator(".badge").all_text_contents()
-    assert any(b in ("high", "medium", "low") for b in badges), \
-        "Expected at least one confidence badge in Field Mappings"
+    # The mapping table must have at least one EAT suggestion populated
+    # (the UI only renders a visible badge for low-confidence fields;
+    #  high/medium fields just show the EAT select with no extra badge)
+    selects = page.locator("table.mapping-table tbody tr select").all()
+    assert any(s.input_value() != "" for s in selects), \
+        "Expected at least one EAT suggestion populated in Field Mappings"
