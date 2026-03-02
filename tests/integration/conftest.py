@@ -138,7 +138,11 @@ def claude_terminal_step(prompt_prefix: str = "") -> str | None:
         f"║  Press Enter with blank input to skip.              ║\n"
         f"╚{'═' * (width - 2)}╝"
     )
-    user_input = input("Your instruction: ").strip()
+    try:
+        user_input = input("Your instruction: ").strip()
+    except EOFError:
+        print("\n[Non-interactive terminal — skipping Claude terminal step]\n")
+        return None
     if not user_input:
         print("[Skipped]\n")
         return None
