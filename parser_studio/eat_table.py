@@ -161,7 +161,7 @@ SYNONYMS: dict[str, str] = {
     "eventid": "eventId", "evtid": "eventId",
     "wineventid": "winEventId", "winevtid": "winEventId",
     # Windows Security Event Log
-    "event_id": "winEventId", "systemprovidereventid": "winEventId",
+    "systemprovidereventid": "winEventId",
 
     # =========================================================================
     # === Hashes ===
@@ -170,8 +170,6 @@ SYNONYMS: dict[str, str] = {
     "md5": "hashMD5", "threatinfomd5": "hashMD5", "filehash": "hashSHA256",
     "sha512": "hashSHA512", "filesha256": "hashSHA256", "filemd5": "hashMD5",
     "filesha1": "hashSHA1",
-    # CEF
-    "fileHash": "hashSHA256",
     # CrowdStrike / EDR
     "sha256hashdata": "hashSHA256", "md5hashdata": "hashMD5",
     "targetsha256": "hashSHA256", "parenthashcode": "parentFileHashCode",
@@ -452,8 +450,10 @@ SYNONYMS: dict[str, str] = {
     "recvpkts": "recvPkts", "receivedpkts": "recvPkts", "pktsrecv": "recvPkts",
     "sentpkts": "sentPkts", "sentpackets": "sentPkts",
     "totpkts": "totPkts", "totalpackets": "totPkts", "packets": "totPkts",
-    # NetFlow (octet = bytes in IPFIX)
-    "octetdeltacount": "recvBytes", "packetdeltacount": "recvPkts",
+    # PAN-OS traffic log packet fields (bytessent/bytesreceived already mapped above)
+    "pktssent": "sentPkts", "pktsreceived": "recvPkts",
+    # NetFlow (octet = bytes in IPFIX; delta counts are direction-agnostic totals)
+    "octetdeltacount": "totBytes", "packetdeltacount": "totPkts",
     # 64-bit variants
     "recvbytes64": "recvBytes64", "sentbytes64": "sentBytes64",
     "totbytes64": "totBytes64",
@@ -584,11 +584,11 @@ SYNONYMS: dict[str, str] = {
     "subjectlogonid": "winLogonId",
     "targetlogonid": "winLogonId",
     "accessmask": "accessMask",
-    "privilegelist": "command",
+    "privilegelist": "privName",
     "creatorprocessname": "parentProcName",
-    "objecttype": "fileExt",
+    "objecttype": "osObjType",
     "objectname": "fileName",
-    "shareinfo": "policyName",
+    "shareinfo": "filePath",
     # SAM Account
     "samaccname": "SamAccountName",
 
@@ -737,10 +737,10 @@ SYNONYMS: dict[str, str] = {
     # id.resp_h → destIpAddr (normalised: idresph — already mapped)
     # id.orig_p → srcIpPort (normalised: idorigp — already mapped)
     # id.resp_p → destIpPort (normalised: idrespp — already mapped)
-    "connstate": "connMode",        # Zeek conn_state → connMode
-    "zeekservice": "serviceName",   # Zeek service field
-    "missedbytes": "recvBytes",     # approximate for unaccounted bytes
-    "historyconn": "tcpFlags",      # Zeek history (TCP flags summary)
+    "connstate": "status",          # Zeek conn_state is a status string, not a connection mode
+    "zeekservice": "serviceName",   # Zeek service field (zeekService not in DB)
+    "missedbytes": "recvBytes",     # missedBytes not in DB; approximate with recvBytes
+    "historyconn": "tcpFlags",      # zeekTcpFlags not in DB; keep tcpFlags
 
     # =========================================================================
     # === FortiGate-specific ===
@@ -766,7 +766,7 @@ SYNONYMS: dict[str, str] = {
     # === CrowdStrike / EDR ===
     # =========================================================================
     "detectionid": "detection",     # CrowdStrike detection ID
-    "agentid": "agentVersion",      # closest EAT for sensor/agent ID
+    "agentid": "deviceIdentification",  # agent/sensor ID → deviceIdentification
     "deviceid": "deviceIdentification",
     "grandparentimagefilename": "parentProcName",
     # tactic/technique already mapped in Attack/MITRE section
