@@ -30,8 +30,9 @@ def test_all_eats_populated():
     assert len(ALL_EATS) > 20
 
 def test_message_field():
+    # threatName is a real EAT in the DB — it should map directly to itself
     result = suggest_mappings(["threatName"])
-    assert result["threatName"][0]["eat"] == "msg"
+    assert result["threatName"][0]["eat"] == "threatName"
 
 def test_hash_field():
     result = suggest_mappings(["md5"])
