@@ -197,3 +197,76 @@ def test_switch_case_works_for_any_device_type():
     xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _NGINX_ACCESS_SAMPLES)
     assert "<switch>" in xml
     assert "srcIpAddr" in xml  # access log → IP capture present
+
+
+# ── Header structure detection (year / IP auto-detection) ─────────────────────
+
+def test_apache_style_header_omits_year_and_ip():
+    """Apache logs have no year or IP in syslog header; generated recognizer must not include them."""
+    xml = generate_parser(_TEXT_META, {}, "syslog+text", _APACHE_SAMPLES)
+    # Split on the recognizer line and check the tokens present / absent
+    rec_line = next(l for l in xml.splitlines() if "eventFormatRecognizer" in l)
+    assert "gPatYear" not in rec_line, "recognizer should not contain gPatYear for Apache-style logs"
+    assert "gPatIpAddr" not in rec_line, "recognizer should not contain gPatIpAddr for Apache-style logs"
+
+
+def test_sentinelone_style_header_includes_year_and_ip():
+    """SentinelOne KV logs have year + IP in syslog header; generated recognizer must include them."""
+    s1 = "Jul 23 10:05:15 2025 host 1.2.3.4 srcip=10.0.0.5 dstip=8.8.8.8"
+    xml = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", [s1])
+    rec_line = next(l for l in xml.splitlines() if "eventFormatRecognizer" in l)
+    assert "gPatYear" in rec_line
+    assert "gPatIpAddr" in rec_line
+
+
+def test_apache_style_header_no_year_skips_datetime_step():
+    """When no year in syslog header, Step 2 must not emit toDateTime with $_year."""
+    xml = generate_parser(_TEXT_META, {}, "syslog+text", _APACHE_SAMPLES)
+    assert "toDateTime($_mon, $_day, $_year" not in xml
+
+
+_MIXED_BODY_SAMPLES = [
+    # access_log body
+    "Jul 23 10:05:15 2025 web01 192.168.1.1 "
+    "192.168.20.35 - - [23/Jul/2025:10:05:15 -0700] \"GET /index.html HTTP/1.1\" 200 1234",
+    # error_log body
+    "Jul 23 10:05:15 2025 web01 192.168.1.1 "
+    "[Thu Jul 23 10:05:15.123456 2025] [proxy_http:error] [pid 12345] message here",
+    # generic body (unstructured text, no IP or bracket at start)
+    "Jul 23 10:05:15 2025 web01 192.168.1.1 "
+    "Some random unstructured message that has no access or error log pattern",
+]
+
+
+def test_generic_case_always_last_in_switch():
+    """When samples produce access_log, error_log and generic bodies, generic must be last."""
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _MIXED_BODY_SAMPLES)
+    assert "<switch>" in xml
+    generic_pos = xml.find("Generic text")
+    error_pos   = xml.find("Error log")
+    access_pos  = xml.find("NCSA Combined")
+    assert generic_pos != -1, "generic case must be present"
+    assert access_pos  < generic_pos, "access_log case must come before generic"
+    assert error_pos   < generic_pos, "error_log case must come before generic"
+
+
+def test_access_log_regex_extracts_http_fields():
+    """Access log switch case must capture httpMethod, uriStem, httpStatusCode."""
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _ACCESS_LOG_SAMPLES)
+    assert "httpMethod"     in xml
+    assert "uriStem"        in xml
+    assert "httpStatusCode" in xml
+    assert "recvBytes64"    in xml
+
+
+def test_error_log_regex_extracts_log_level():
+    """Error log switch case must capture logLevel."""
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _ERROR_LOG_SAMPLES)
+    assert "logLevel" in xml
+
+
+def test_access_log_with_leading_code_classified_as_access_log():
+    """Body starting with '0  IP ...' (optional leading code) must generate access_log case."""
+    xml = generate_parser(_TEXT_META, {}, "syslog+text", _APACHE_SAMPLES)
+    # Sample 2 has '0  192.168.20.35 ...' body; access_log case must be present
+    assert "NCSA Combined" in xml

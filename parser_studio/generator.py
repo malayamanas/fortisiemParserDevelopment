@@ -3,8 +3,13 @@ from collections import Counter
 
 from parser_studio.detector import strip_syslog_header
 
-_RE_ACCESS_LOG_BODY = re.compile(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}')
+_RE_ACCESS_LOG_BODY = re.compile(r'^(?:\d+\s+)?\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}')
 _RE_ERROR_LOG_BODY  = re.compile(r'^\[')
+
+# Header structure detection helpers
+_YEAR_RE = re.compile(r'^\d{4}$')
+_IP_RE   = re.compile(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$')
+_PRI_RE  = re.compile(r'^<\d{1,3}>')
 
 
 def _has_syslog_pri(samples: list[str]) -> bool:
@@ -59,6 +64,44 @@ def _detect_log_tag(samples: list[str], fmt: str) -> str | None:
     return None
 
 
+def _detect_header_structure(samples: list[str]) -> dict:
+    """Return {'has_year': bool, 'has_ip': bool} from syslog header analysis.
+
+    Examines tokens after the timestamp to determine whether year and/or a
+    source IP address appear in the syslog header before the body/tag.
+    Uses majority vote across non-empty samples.  Returns the safe default
+    (both True) when no syslog headers can be parsed — this preserves the
+    existing behaviour for KV/JSON formats whose conftest samples include year
+    and IP.
+    """
+    year_count = ip_count = total = 0
+    for s in (samples or []):
+        if not s.strip():
+            continue
+        hdr, _ = strip_syslog_header(s)
+        if hdr is None:
+            continue
+        total += 1
+        pri_m = _PRI_RE.match(hdr)
+        clean = hdr[pri_m.end():].strip() if pri_m else hdr.strip()
+        tokens = clean.split()
+        # Tokens: MON=0 DAY=1 TIME=2; year and IP appear at index 3+
+        for tok in tokens[3:]:
+            if _YEAR_RE.match(tok):
+                year_count += 1
+                break
+        for tok in tokens[3:]:
+            if _IP_RE.match(tok):
+                ip_count += 1
+                break
+    if total == 0:
+        return {'has_year': True, 'has_ip': True}  # safe default: old behaviour
+    return {
+        'has_year': year_count / total >= 0.5,
+        'has_ip':   ip_count  / total >= 0.5,
+    }
+
+
 def _classify_body_structure(body: str) -> str:
     """Classify syslog body structure: 'access_log', 'error_log', or 'generic'."""
     body = body.strip()
@@ -70,29 +113,37 @@ def _classify_body_structure(body: str) -> str:
 
 
 def _generate_switch_extraction(structures: list[str]) -> str:
-    """Return switch/case XML for syslog+text based on detected body structures."""
+    """Return switch/case XML for syslog+text based on detected body structures.
+
+    The generic catch-all case is always emitted last so specific patterns
+    (access_log, error_log) are tried first.
+    """
     seen = []
     for s in structures:
         if s not in seen:
             seen.append(s)
+    # Generic matches anything; keep it last so specific cases run first
+    ordered = [s for s in seen if s != 'generic']
+    if 'generic' in seen:
+        ordered.append('generic')
 
     lines = ['    <switch>']
-    for struct in seen:
+    for struct in ordered:
         if struct == 'access_log':
             lines += [
                 '      <case>',
-                '        <!-- NCSA Combined Log Format: client ident user [ts] "method path proto" status bytes -->',
+                '        <!-- NCSA Combined Log Format: [code] client ident user [ts] "method path proto" status bytes -->',
                 '        <collectFieldsByRegex src="$_body">',
-                '          <regex><![CDATA[<srcIpAddr:gPatIpAddr>\\s+<:gPatStr>\\s+<:gPatStr>\\s+\\[<:gPatMesgBodyMin>\\]\\s+"<:gPatStr>\\s+<:gPatStr>\\s+<:gPatStr>"\\s+<:gPatInt>\\s+<:gPatInt>]]></regex>',
+                '          <regex><![CDATA[(?:\\d+\\s+)?<srcIpAddr:gPatIpAddr>\\s+<:gPatStr>\\s+<_user:gPatStr>\\s+\\[<:gPatMesgBodyMin>\\]\\s+"<httpMethod:gPatStr>\\s+<uriStem:gPatStr>\\s+<:gPatStr>"\\s+<httpStatusCode:gPatInt>\\s+<recvBytes64:gPatStr>]]></regex>',
                 '        </collectFieldsByRegex>',
                 '      </case>',
             ]
         elif struct == 'error_log':
             lines += [
                 '      <case>',
-                '        <!-- Error log: [timestamp] [module:level] message -->',
+                '        <!-- Error log: [timestamp] [module:level] [pid NNN] message -->',
                 '        <collectFieldsByRegex src="$_body">',
-                '          <regex><![CDATA[\\[<:gPatMesgBodyMin>\\]\\s+\\[<:gPatStr>\\]\\s+<msg:gPatMesgBody>]]></regex>',
+                '          <regex><![CDATA[\\[<:gPatMesgBodyMin>\\]\\s+\\[<logLevel:gPatStr>\\]\\s+<msg:gPatMesgBody>]]></regex>',
                 '        </collectFieldsByRegex>',
                 '      </case>',
             ]
@@ -179,6 +230,11 @@ def generate_parser(meta: dict, mappings: dict[str, str],
         if detected is not None:
             anchor = detected
 
+    # Detect whether year and source IP appear in the syslog header
+    hdr_struct = _detect_header_structure(samples) if fmt.startswith("syslog") else {'has_year': True, 'has_ip': True}
+    has_year = hdr_struct['has_year']
+    has_ip   = hdr_struct['has_ip']
+
     # Body variable name per format
     body_var = {
         "syslog+json":       "_jsonBody",
@@ -194,11 +250,16 @@ def generate_parser(meta: dict, mappings: dict[str, str],
     has_pri = _has_syslog_pri(samples)
     pri_prefix = "<:gPatSyslogPRI>\\s*" if has_pri else ""
 
+    # Build optional year/IP tokens from header structure detected in samples
+    year_tok     = "\\s+<:gPatYear>"      if has_year else ""
+    year_capture = "\\s+<_year:gPatYear>" if has_year else ""
+    ip_tok       = "\\s+<:gPatIpAddr>"    if has_ip   else ""
+
     # eventFormatRecognizer pattern
     if fmt.startswith("syslog"):
         recognizer = (
-            f"{pri_prefix}<:gPatMon>\\s+<:gPatDay>\\s+<:gPatTime>\\s+<:gPatYear>"
-            f"\\s+<:gPatStr>\\s+<:gPatIpAddr>\\s+{anchor}"
+            f"{pri_prefix}<:gPatMon>\\s+<:gPatDay>\\s+<:gPatTime>"
+            f"{year_tok}\\s+<:gPatStr>{ip_tok}\\s+{anchor}"
         )
     else:
         recognizer = f'"type"\\s*:\\s*"'  # generic JSON anchor stub
@@ -208,7 +269,7 @@ def generate_parser(meta: dict, mappings: dict[str, str],
         anchor_token = anchor.rstrip(":")
         header_regex = (
             f"{pri_prefix}<_mon:gPatMon>\\s+<_day:gPatDay>\\s+<_time:gPatTime>"
-            f"\\s+<_year:gPatYear>\\s+<_devHost:gPatStr>\\s+<:gPatIpAddr>"
+            f"{year_capture}\\s+<_devHost:gPatStr>{ip_tok}"
             f"\\s+{anchor_token}:?\\s+<{body_var}:gPatMesgBody>"
         )
     else:
@@ -229,12 +290,18 @@ def generate_parser(meta: dict, mappings: dict[str, str],
     ]
 
     if fmt.startswith("syslog"):
-        xml_lines += [
-            '',
-            '  <!-- Step 2: Set deviceTime from syslog header -->',
-            '  <setEventAttribute attr="deviceTime">'
-            'toDateTime($_mon, $_day, $_year, $_time)</setEventAttribute>',
-        ]
+        if has_year:
+            xml_lines += [
+                '',
+                '  <!-- Step 2: Set deviceTime from syslog header -->',
+                '  <setEventAttribute attr="deviceTime">'
+                'toDateTime($_mon, $_day, $_year, $_time)</setEventAttribute>',
+            ]
+        else:
+            xml_lines += [
+                '',
+                '  <!-- Step 2: Set deviceTime from body timestamp (no year in syslog header) -->',
+            ]
 
     xml_lines += [
         '',
