@@ -1,4 +1,7 @@
 import re
+from collections import Counter
+
+from parser_studio.detector import strip_syslog_header
 
 
 def _has_syslog_pri(samples: list[str]) -> bool:
@@ -8,6 +11,49 @@ def _has_syslog_pri(samples: list[str]) -> bool:
         return False
     matches = sum(1 for s in non_empty if re.match(r"^<\d{1,3}>", s))
     return (matches / len(non_empty)) >= 0.6
+
+
+_LOG_TAG_RE = re.compile(r'^[A-Za-z][\w._-]*:?$')
+
+
+def _detect_log_tag(samples: list[str], fmt: str) -> str | None:
+    """Return the dominant log-type tag token from syslog samples, or None.
+
+    For syslog formats, strip the syslog header from each sample using
+    strip_syslog_header. The last whitespace-delimited token of the header
+    portion is the program tag (e.g. 'ApacheLog' or 'Apache_ErrorLog:').
+    If that token matches ^[A-Za-z][\\w._-]*:?$ and appears in >50% of
+    non-empty samples, return it. Otherwise return None.
+
+    For non-syslog formats, always returns None.
+    """
+    if not fmt.startswith("syslog"):
+        return None
+
+    non_empty = [s for s in samples if s.strip()]
+    if not non_empty:
+        return None
+
+    tags: list[str] = []
+    for sample in non_empty:
+        hdr, _body = strip_syslog_header(sample)
+        if hdr is None:
+            continue
+        hdr_tokens = hdr.split()
+        if not hdr_tokens:
+            continue
+        candidate = hdr_tokens[-1]
+        if _LOG_TAG_RE.match(candidate):
+            tags.append(candidate)
+
+    if not tags:
+        return None
+
+    counts = Counter(tags)
+    most_common_tag, count = counts.most_common(1)[0]
+    if count / len(non_empty) > 0.5:
+        return most_common_tag
+    return None
 
 
 def _safe_comment(text: str) -> str:
@@ -67,7 +113,14 @@ def generate_parser(meta: dict, mappings: dict[str, str],
     fmt: detected format string
     """
     name   = meta.get("name", "CustomParser")
-    anchor = meta.get("anchor") or name.upper().replace(" ", "_")
+    _fallback_anchor = name.upper().replace(" ", "_")
+    anchor = meta.get("anchor") or _fallback_anchor
+
+    # Auto-detect log-type tag from sample bodies when anchor is blank/fallback
+    if fmt.startswith("syslog") and anchor == _fallback_anchor:
+        detected = _detect_log_tag(samples, fmt)
+        if detected is not None:
+            anchor = detected
 
     # Body variable name per format
     body_var = {

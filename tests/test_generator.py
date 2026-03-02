@@ -87,6 +87,13 @@ _APACHE_SAMPLES = [
     '<182>Mar 22 19:00:14 lab1.example.com Apache_ErrorLog: [Tue Mar 22 16:17:41.711593 2022] [proxy_http:error]',
 ]
 
+_TEXT_META = {
+    "name": "ApacheParser", "scope": "enabled", "parser_type": "User",
+    "vendor": "Apache", "model": "Apache", "version": "ANY",
+    "anchor": "",  # blank -- should be auto-detected
+}
+
+
 def test_syslog_pri_prepended_when_samples_have_pri():
     xml_str = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", _APACHE_SAMPLES)
     assert "gPatSyslogPRI" in xml_str
@@ -109,3 +116,27 @@ def test_pri_in_both_recognizer_and_header_regex():
     # Both the recognizer line AND a non-recognizer line (header regex CDATA) must contain gPatSyslogPRI
     lines_with_pri = [l for l in xml_str.splitlines() if "gPatSyslogPRI" in l]
     assert len(lines_with_pri) >= 2, "gPatSyslogPRI must appear in both recognizer and header regex"
+
+
+def test_apache_tag_detected_in_recognizer():
+    """Consistent 'ApacheLog' token from samples appears in recognizer."""
+    xml_str = generate_parser(_TEXT_META, {}, "syslog+text", _APACHE_SAMPLES)
+    assert "ApacheLog" in xml_str
+
+
+def test_explicit_anchor_not_overridden():
+    """If meta['anchor'] is explicitly set, it must not be replaced by auto-detection."""
+    meta_with_anchor = {**_TEXT_META, "anchor": "MY_CUSTOM_ANCHOR"}
+    xml_str = generate_parser(meta_with_anchor, {}, "syslog+text", _APACHE_SAMPLES)
+    assert "MY_CUSTOM_ANCHOR" in xml_str
+
+
+def test_no_consistent_tag_falls_back_to_name():
+    """If samples have no consistent tag, parser name-based anchor is used."""
+    diverse = [
+        "Jul 23 10:05:15 2025 fw01 192.168.1.1 FOO srcip=1.1.1.1",
+        "Jul 23 10:05:15 2025 fw01 192.168.1.1 BAR srcip=2.2.2.2",
+    ]
+    xml_str = generate_parser(_TEXT_META, {}, "syslog+kv", diverse)
+    # Should fall back to APACHEPARSER (name uppercased) since anchor is blank
+    assert "APACHEPARSER" in xml_str
