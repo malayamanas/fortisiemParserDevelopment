@@ -132,7 +132,7 @@ def claude_terminal_step(prompt_prefix: str = "") -> str | None:
     )
     if prompt_prefix:
         for line in prompt_prefix.splitlines():
-            print(f"║  {line[:(width - 6)]:<{width - 6}} ║")
+            print(f"║  {line[:(width - 5)]:<{width - 5}} ║")
     print(
         f"╠{'═' * (width - 2)}╣\n"
         f"║  Press Enter with blank input to skip.              ║\n"
