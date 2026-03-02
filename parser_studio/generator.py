@@ -169,7 +169,7 @@ def generate_parser(meta: dict, mappings: dict[str, str],
     mappings: {log_field: fortisiem_eat}
     fmt: detected format string
     """
-    name   = meta.get("name", "CustomParser")
+    name   = meta.get("name") or "CustomParser"
     _fallback_anchor = name.upper().replace(" ", "_")
     anchor = meta.get("anchor") or _fallback_anchor
 
