@@ -2,6 +2,9 @@ import re
 import json
 from collections import Counter
 
+# Optional syslog PRI prefix: <NNN>  (e.g. <142>, <182>)
+_SYSLOG_PRI = re.compile(r'^<\d{1,3}>')
+
 # Standard syslog: "Jul 23 00:33:28" or "Jul  3 00:33:28"
 _SYSLOG_HDR = re.compile(
     r'^(?:\w{3}|\d{1,2})\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}'
@@ -15,7 +18,9 @@ _ISO_HDR = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}')
 
 _KV_PLAIN   = re.compile(r'\b\w[\w\s]{0,30}?=\S+')
 _KV_BRACKET = re.compile(r'\[[\w\s]+?\]=')
-_XML_TAG    = re.compile(r'<\w[\w:.-]*[\s>]')
+# XML tags must start with a letter or underscore (not a digit).
+# This prevents syslog PRI values like <142> from being classified as XML.
+_XML_TAG    = re.compile(r'<[a-zA-Z_][\w:.-]*[\s>/]')
 
 
 def strip_syslog_header(raw: str) -> tuple[str | None, str]:
@@ -25,12 +30,19 @@ def strip_syslog_header(raw: str) -> tuple[str | None, str]:
     so the returned body starts at the first '{' character.
     For XML payloads: body starts at the first XML tag.
     For KV/text: body is everything after the standard syslog tokens.
+    Handles optional syslog PRI prefix <NNN> (e.g. <142>Sep 17...).
     """
-    m = _SYSLOG_HDR.match(raw) or _ISO_HDR.match(raw)
+    # Strip optional leading syslog PRI <NNN> before matching timestamp
+    pri_m = _SYSLOG_PRI.match(raw)
+    pri_len = pri_m.end() if pri_m else 0
+    effective = raw[pri_len:]
+    m = _SYSLOG_HDR.match(effective) or _ISO_HDR.match(effective)
     if not m:
         return None, raw
 
-    remainder = raw[m.end():]
+    # All offsets into raw = pri_len + offset_in_effective
+    hdr_end = pri_len + m.end()
+    remainder = raw[hdr_end:]
 
     # Look for JSON body: find first { and validate
     brace_pos = remainder.find('{')
@@ -38,17 +50,17 @@ def strip_syslog_header(raw: str) -> tuple[str | None, str]:
         candidate = remainder[brace_pos:]
         try:
             json.loads(candidate)
-            return raw[:m.end() + brace_pos], candidate
+            return raw[:hdr_end + brace_pos], candidate
         except ValueError:
             pass
 
     # Look for XML body
     xml_m = _XML_TAG.search(remainder)
     if xml_m:
-        return raw[:m.end() + xml_m.start()], remainder[xml_m.start():]
+        return raw[:hdr_end + xml_m.start()], remainder[xml_m.start():]
 
     # KV or text: return standard tokens as header, rest as body
-    return m.group(0), remainder
+    return raw[:hdr_end], remainder
 
 
 def _classify_body(body: str) -> str:
