@@ -140,3 +140,60 @@ def test_no_consistent_tag_falls_back_to_name():
     xml_str = generate_parser(_TEXT_META, {}, "syslog+kv", diverse)
     # Should fall back to APACHEPARSER (name uppercased) since anchor is blank
     assert "APACHEPARSER" in xml_str
+
+
+# ── Task 3: switch/case scaffold ─────────────────────────────────────────────
+
+_ACCESS_LOG_SAMPLES = [
+    "Jul 23 10:05:15 2025 web01 192.168.1.1 "
+    "192.168.20.35 - - [23/Jul/2025:10:05:15 -0700] "
+    '"GET /index.html HTTP/1.1" 200 1234',
+    "Jul 23 10:06:00 2025 web01 192.168.1.1 "
+    "10.0.0.5 - - [23/Jul/2025:10:06:00 -0700] "
+    '"POST /api HTTP/1.1" 201 56',
+]
+
+_ERROR_LOG_SAMPLES = [
+    "Jul 23 10:05:15 2025 web01 192.168.1.1 "
+    "[Thu Jul 23 10:05:15.123456 2025] [proxy_http:error] [pid 12345] message here",
+    "Jul 23 10:06:00 2025 web01 192.168.1.1 "
+    "[Thu Jul 23 10:06:00.654321 2025] [auth:warn] [pid 98765] another message",
+]
+
+_NGINX_ACCESS_SAMPLES = [
+    "Jul 23 10:05:15 2025 nginx01 192.168.1.1 "
+    "203.0.113.42 - - [23/Jul/2025:10:05:15 +0000] "
+    '"GET /health HTTP/1.1" 200 2',
+]
+
+_TEXT_META_NO_ANCHOR = {
+    "name": "WebParser", "scope": "enabled", "parser_type": "User",
+    "vendor": "Generic", "model": "WebServer", "version": "ANY", "anchor": "",
+}
+
+
+def test_syslog_text_generates_switch_case():
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _ACCESS_LOG_SAMPLES)
+    assert "<switch>" in xml
+    assert "<case>" in xml
+    assert "<default/>" in xml
+
+
+def test_access_log_body_generates_srcIpAddr_capture():
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _ACCESS_LOG_SAMPLES)
+    assert "srcIpAddr" in xml
+    assert "gPatIpAddr" in xml
+
+
+def test_error_log_body_generates_bracket_pattern():
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _ERROR_LOG_SAMPLES)
+    assert "<switch>" in xml
+    # error_log case uses bracket pattern
+    assert "\\[<:gPatMesgBodyMin>\\]" in xml
+
+
+def test_switch_case_works_for_any_device_type():
+    """switch/case scaffold is device-type agnostic (Nginx access logs here)."""
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _NGINX_ACCESS_SAMPLES)
+    assert "<switch>" in xml
+    assert "srcIpAddr" in xml  # access log → IP capture present
