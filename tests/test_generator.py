@@ -106,7 +106,6 @@ def test_pri_in_both_recognizer_and_header_regex():
     lines = xml_str.splitlines()
     recognizer_line = next(l for l in lines if "eventFormatRecognizer" in l)
     assert "gPatSyslogPRI" in recognizer_line
-    # Header regex is inside a CDATA in the first collectFieldsByRegex
-    header_regex_line = next(l for l in lines if "collectFieldsByRegex" in l or "gPatMon" in l)
-    # gPatSyslogPRI must appear before gPatMon in the output
-    assert xml_str.index("gPatSyslogPRI") < xml_str.index("gPatMon")
+    # Both the recognizer line AND a non-recognizer line (header regex CDATA) must contain gPatSyslogPRI
+    lines_with_pri = [l for l in xml_str.splitlines() if "gPatSyslogPRI" in l]
+    assert len(lines_with_pri) >= 2, "gPatSyslogPRI must appear in both recognizer and header regex"

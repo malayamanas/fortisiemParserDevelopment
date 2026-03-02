@@ -81,9 +81,11 @@ def generate_parser(meta: dict, mappings: dict[str, str],
 
     extraction = _extraction_element(fmt, mappings)
 
+    has_pri = _has_syslog_pri(samples)
+    pri_prefix = "<:gPatSyslogPRI>\\s*" if has_pri else ""
+
     # eventFormatRecognizer pattern
     if fmt.startswith("syslog"):
-        pri_prefix = "<:gPatSyslogPRI>\\s*" if _has_syslog_pri(samples) else ""
         recognizer = (
             f"{pri_prefix}<:gPatMon>\\s+<:gPatDay>\\s+<:gPatTime>\\s+<:gPatYear>"
             f"\\s+<:gPatStr>\\s+<:gPatIpAddr>\\s+{anchor}"
@@ -93,7 +95,6 @@ def generate_parser(meta: dict, mappings: dict[str, str],
 
     # Step-1 regex to extract the body variable
     if fmt.startswith("syslog"):
-        pri_prefix = "<:gPatSyslogPRI>\\s*" if _has_syslog_pri(samples) else ""
         header_regex = (
             f"{pri_prefix}<_mon:gPatMon>\\s+<_day:gPatDay>\\s+<_time:gPatTime>"
             f"\\s+<_year:gPatYear>\\s+<_devHost:gPatStr>\\s+<:gPatIpAddr>"
