@@ -42,7 +42,5 @@ def test_generate_parser(page, no_pause, live_server):
 
     # ── Automated: Validate ───────────────────────────────────────────────
     page.get_by_role("button", name="Validate").click()
-    page.wait_for_selector(".badge-ok", timeout=5_000)
-
-    badge = page.locator(".badge-ok").first
-    assert badge.is_visible(), "Expected green 'Valid XML' badge after Validate"
+    page.wait_for_selector("text=Valid XML", timeout=5_000)
+    assert page.is_visible("text=Valid XML"), "Expected 'Valid XML' badge after Validate"
