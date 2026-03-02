@@ -6,10 +6,10 @@ import shutil
 import pytest
 from tests.integration.conftest import human_step, claude_terminal_step
 
-# A log line with ambiguous custom fields that will score low confidence
+# Fields deliberately unmappable so confidence is always 'low'
 _AMBIGUOUS_SAMPLE = (
     "Jul 23 10:05:15 2025 edr01 10.0.0.1 "
-    "threatCategory=ransomware riskScore=87 agentGuid=abc-123"
+    "xyzzyFooBar=ransomware zzzQuxCorge=87 qqq999Wibble=abc-123"
 )
 
 
