@@ -6,6 +6,21 @@ from parser_studio.detector import strip_syslog_header
 _KV_PLAIN   = re.compile(r'(\b\w[\w\s]{0,20}?)=([^,\s"\']+)')
 _KV_BRACKET = re.compile(r'\[([\w\s]+?)\]=([^\s,]+)')
 
+# syslog+text body structure patterns for structured extraction
+# NCSA Combined Log Format: [optional-code] IP ident authuser [ts] "request" status bytes
+_NCSA_ACCESS_LOG_RE = re.compile(
+    r'^(?:\d+\s+)?'                              # optional leading code
+    r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+' # client_ip
+    r'(\S+)\s+(\S+)\s+'                          # ident, authuser
+    r'\[([^\]]+)\]\s+'                           # req_time in brackets
+    r'"([^"]*)"\s+'                              # request in quotes
+    r'(\d+)\s+(\S+)'                             # status_code, bytes
+)
+# Error log: [timestamp] [module:level] [pid NNN] message
+_SYSLOG_TEXT_ERROR_RE = re.compile(
+    r'^\[([^\]]+)\]\s+\[([^\]]*)\](?:\s+\[pid\s+(\d+)[^\]]*\])?\s*(.*)'
+)
+
 
 def _flatten_json(obj, prefix="") -> dict[str, str]:
     """Recursively flatten a dict/list to dot-notation keys."""
@@ -74,7 +89,31 @@ def _extract_one(raw: str, fmt: str) -> dict[str, str]:
         except ET.ParseError:
             return {}
 
-    # syslog+text: tokenise — return positional token suggestions
+    # syslog+text: try structured body patterns before falling back to tokens
+    m = _NCSA_ACCESS_LOG_RE.match(body)
+    if m:
+        return {
+            "client_ip":   m.group(1),
+            "ident":       m.group(2),
+            "authuser":    m.group(3),
+            "req_time":    m.group(4),
+            "request":     m.group(5),
+            "status_code": m.group(6),
+            "bytes":       m.group(7),
+        }
+    m = _SYSLOG_TEXT_ERROR_RE.match(body)
+    if m:
+        result: dict[str, str] = {
+            "err_time":  m.group(1),
+            "log_level": m.group(2),
+        }
+        if m.group(3):
+            result["pid"] = m.group(3)
+        msg = (m.group(4) or "").strip()
+        if msg:
+            result["message"] = msg
+        return result
+    # fallback: whitespace tokens
     tokens = body.split()
     return {f"_token{i}": tok for i, tok in enumerate(tokens[:20])}
 

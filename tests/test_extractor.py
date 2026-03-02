@@ -70,6 +70,43 @@ def test_token_matrix_consistent_flag():
     type_row = next(r for r in rows if r["token"] == "type")
     assert type_row["consistent"] is True
 
+def test_syslog_text_access_log_extracts_named_fields():
+    sample = (
+        "<142>Sep 17 13:27:37 example.com ApacheLog "
+        '192.168.20.35 - - [17/Sep/2009:13:27:37 -0700] '
+        '"GET /icons/apache_pb2.gif HTTP/1.1" 200 2414'
+    )
+    fields = extract_fields([sample], "syslog+text")
+    assert "client_ip" in fields
+    assert "request" in fields
+    assert "status_code" in fields
+    assert "_token0" not in fields   # no positional tokens
+
+
+def test_syslog_text_error_log_extracts_named_fields():
+    sample = (
+        "<182>Mar 22 19:00:14 lab1.example.com Apache_ErrorLog: "
+        "[Tue Mar 22 16:17:41.711593 2022] [proxy_http:error] "
+        "[pid 12345] Connection refused"
+    )
+    fields = extract_fields([sample], "syslog+text")
+    assert "log_level" in fields
+    assert "message" in fields
+    assert "_token0" not in fields
+
+
+def test_syslog_text_access_log_with_leading_code():
+    """FortiSIEM sometimes inserts a numeric code before the client IP."""
+    sample = (
+        "<142>Sep 17 13:27:37 example.com ApacheLog 0 "
+        '192.168.20.35 - - [17/Sep/2009:13:27:37 -0700] '
+        '"GET /index.html HTTP/1.1" 404 512'
+    )
+    fields = extract_fields([sample], "syslog+text")
+    assert "client_ip" in fields
+    assert fields["client_ip"]["values"][0] == "192.168.20.35"
+
+
 def test_token_matrix_absent_token_is_empty_string():
     s1 = "Jan 15 10:00:00 host tag srcip=1.1.1.1 dstip=2.2.2.2"
     s2 = "Jan 16 11:00:00 host tag srcip=3.3.3.3"
