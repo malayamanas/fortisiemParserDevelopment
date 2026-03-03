@@ -2,6 +2,7 @@ import re
 from collections import Counter
 
 from parser_studio.detector import strip_syslog_header
+from parser_studio.extractor import extract_fields
 
 _RE_ACCESS_LOG_BODY = re.compile(r'^(?:\d+\s+)?\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}')
 _RE_ERROR_LOG_BODY  = re.compile(r'^\[')
@@ -9,7 +10,32 @@ _RE_ERROR_LOG_BODY  = re.compile(r'^\[')
 # Header structure detection helpers
 _YEAR_RE = re.compile(r'^\d{4}$')
 _IP_RE   = re.compile(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$')
-_PRI_RE  = re.compile(r'^<\d{1,3}>')
+_PRI_RE      = re.compile(r'^<\d{1,3}>')
+_TZ_TOKEN_RE = re.compile(r'^(?:Z|UTC|GMT|[+-]\d{1,2}:?\d{2})$')
+
+# Body timestamp field detection
+_TS_FIELD_NAMES = frozenset({
+    'timestamp', 'time', 'ts', 'datetime', 'date',
+    'created_at', 'createdat', 'event_time', 'eventtime',
+    'log_time', 'logtime', '@timestamp',
+    'createdAt', 'eventTime', 'deviceTime', 'startTime', 'endTime',
+})
+
+# (value_pattern, toDateTime format string or epoch sentinel, description)
+_TS_VALUE_PATTERNS = [
+    (re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$'),
+     "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", "ISO 8601 microseconds UTC"),
+    (re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'),
+     "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", "ISO 8601 milliseconds UTC"),
+    (re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'),
+     "yyyy-MM-dd'T'HH:mm:ss'Z'", "ISO 8601 UTC"),
+    (re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:?\d{2}$'),
+     "yyyy-MM-dd'T'HH:mm:ssXXX", "ISO 8601 with TZ offset"),
+    (re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$'),
+     "yyyy-MM-dd HH:mm:ss", "space-separated datetime"),
+    (re.compile(r'^\d{13}$'), "epoch_ms", "epoch milliseconds"),
+    (re.compile(r'^\d{10}$'), "epoch_s", "epoch seconds"),
+]
 
 
 def _has_syslog_pri(samples: list[str]) -> bool:
@@ -65,16 +91,15 @@ def _detect_log_tag(samples: list[str], fmt: str) -> str | None:
 
 
 def _detect_header_structure(samples: list[str]) -> dict:
-    """Return {'has_year': bool, 'has_ip': bool} from syslog header analysis.
+    """Return {'has_year': bool, 'has_ip': bool, 'has_tz': bool} from syslog header analysis.
 
-    Examines tokens after the timestamp to determine whether year and/or a
-    source IP address appear in the syslog header before the body/tag.
+    Examines tokens after the timestamp to determine whether year, source IP,
+    and/or a timezone token appear in the syslog header before the body/tag.
     Uses majority vote across non-empty samples.  Returns the safe default
-    (both True) when no syslog headers can be parsed — this preserves the
-    existing behaviour for KV/JSON formats whose conftest samples include year
-    and IP.
+    when no syslog headers can be parsed — this preserves the existing
+    behaviour for KV/JSON formats whose conftest samples include year and IP.
     """
-    year_count = ip_count = total = 0
+    year_count = ip_count = tz_count = total = 0
     for s in (samples or []):
         if not s.strip():
             continue
@@ -85,7 +110,7 @@ def _detect_header_structure(samples: list[str]) -> dict:
         pri_m = _PRI_RE.match(hdr)
         clean = hdr[pri_m.end():].strip() if pri_m else hdr.strip()
         tokens = clean.split()
-        # Tokens: MON=0 DAY=1 TIME=2; year and IP appear at index 3+
+        # Tokens: MON=0 DAY=1 TIME=2; year, IP, and TZ appear at index 3+
         for tok in tokens[3:]:
             if _YEAR_RE.match(tok):
                 year_count += 1
@@ -94,12 +119,36 @@ def _detect_header_structure(samples: list[str]) -> dict:
             if _IP_RE.match(tok):
                 ip_count += 1
                 break
+        for tok in tokens[3:]:
+            if _TZ_TOKEN_RE.match(tok):
+                tz_count += 1
+                break
     if total == 0:
-        return {'has_year': True, 'has_ip': True}  # safe default: old behaviour
+        return {'has_year': True, 'has_ip': True, 'has_tz': False}  # safe default
     return {
         'has_year': year_count / total >= 0.5,
         'has_ip':   ip_count  / total >= 0.5,
+        'has_tz':   tz_count  / total >= 0.5,
     }
+
+
+def _detect_body_timestamp(fields: dict) -> dict | None:
+    """Return {field, fmt_string, description} for first recognized timestamp field, or None.
+
+    fields: output of extract_fields() — {name: {values: [...], optional: bool}}
+    fmt_string is the Java SimpleDateFormat pattern for toDateTime(), or
+    'epoch_s'/'epoch_ms' for epoch timestamps.
+    Returns None if no recognized timestamp field is found.
+    """
+    ts_lower = {n.lower() for n in _TS_FIELD_NAMES}
+    for field_name, info in fields.items():
+        if field_name.lower() not in ts_lower:
+            continue
+        for val in info.get('values', []):
+            for pat, fmt_string, desc in _TS_VALUE_PATTERNS:
+                if pat.match(str(val)):
+                    return {'field': field_name, 'fmt_string': fmt_string, 'description': desc}
+    return None
 
 
 def _classify_body_structure(body: str) -> str:
@@ -230,10 +279,11 @@ def generate_parser(meta: dict, mappings: dict[str, str],
         if detected is not None:
             anchor = detected
 
-    # Detect whether year and source IP appear in the syslog header
-    hdr_struct = _detect_header_structure(samples) if fmt.startswith("syslog") else {'has_year': True, 'has_ip': True}
+    # Detect whether year, source IP, and TZ appear in the syslog header
+    hdr_struct = _detect_header_structure(samples) if fmt.startswith("syslog") else {'has_year': True, 'has_ip': True, 'has_tz': False}
     has_year = hdr_struct['has_year']
     has_ip   = hdr_struct['has_ip']
+    has_tz   = hdr_struct['has_tz']
 
     # Body variable name per format
     body_var = {
@@ -247,19 +297,30 @@ def generate_parser(meta: dict, mappings: dict[str, str],
 
     extraction = _extraction_element(fmt, mappings, samples)
 
+    # Detect body timestamp field for Step 3b (JSON/KV formats only)
+    body_ts = None
+    if fmt in ('syslog+json', 'json', 'syslog+kv', 'syslog+bracket-kv') and samples:
+        try:
+            sampled_fields = extract_fields(samples, fmt)
+            body_ts = _detect_body_timestamp(sampled_fields)
+        except Exception:
+            pass
+
     has_pri = _has_syslog_pri(samples)
     pri_prefix = "<:gPatSyslogPRI>\\s*" if has_pri else ""
 
-    # Build optional year/IP tokens from header structure detected in samples
-    year_tok     = "\\s+<:gPatYear>"      if has_year else ""
-    year_capture = "\\s+<_year:gPatYear>" if has_year else ""
-    ip_tok       = "\\s+<:gPatIpAddr>"    if has_ip   else ""
+    # Build optional year/IP/TZ tokens from header structure detected in samples
+    year_tok     = "\\s+<:gPatYear>"        if has_year else ""
+    year_capture = "\\s+<_year:gPatYear>"   if has_year else ""
+    ip_tok       = "\\s+<:gPatIpAddr>"      if has_ip   else ""
+    tz_tok       = "\\s+<:gPatTimeZone>"    if has_tz   else ""
+    tz_capture   = "\\s+<_tz:gPatTimeZone>" if has_tz   else ""
 
     # eventFormatRecognizer pattern
     if fmt.startswith("syslog"):
         recognizer = (
             f"{pri_prefix}<:gPatMon>\\s+<:gPatDay>\\s+<:gPatTime>"
-            f"{year_tok}\\s+<:gPatStr>{ip_tok}\\s+{anchor}"
+            f"{year_tok}{tz_tok}\\s+<:gPatStr>{ip_tok}\\s+{anchor}"
         )
     else:
         recognizer = f'"type"\\s*:\\s*"'  # generic JSON anchor stub
@@ -269,7 +330,7 @@ def generate_parser(meta: dict, mappings: dict[str, str],
         anchor_token = anchor.rstrip(":")
         header_regex = (
             f"{pri_prefix}<_mon:gPatMon>\\s+<_day:gPatDay>\\s+<_time:gPatTime>"
-            f"{year_capture}\\s+<_devHost:gPatStr>{ip_tok}"
+            f"{year_capture}{tz_capture}\\s+<_devHost:gPatStr>{ip_tok}"
             f"\\s+{anchor_token}:?\\s+<{body_var}:gPatMesgBody>"
         )
     else:
@@ -290,23 +351,42 @@ def generate_parser(meta: dict, mappings: dict[str, str],
     ]
 
     if fmt.startswith("syslog"):
-        if has_year:
-            xml_lines += [
-                '',
-                '  <!-- Step 2: Set deviceTime from syslog header -->',
-                '  <setEventAttribute attr="deviceTime">'
-                'toDateTime($_mon, $_day, $_year, $_time)</setEventAttribute>',
-            ]
+        if has_year and has_tz:
+            dt_call = 'toDateTime($_mon, $_day, $_year, $_time, $_tz)'
+        elif has_year:
+            dt_call = 'toDateTime($_mon, $_day, $_year, $_time)'
         else:
-            xml_lines += [
-                '',
-                '  <!-- Step 2: Set deviceTime from body timestamp (no year in syslog header) -->',
-            ]
+            dt_call = 'toDateTime($_mon, $_day, $_time)'
+        xml_lines += [
+            '',
+            '  <!-- Step 2: Set deviceTime from syslog header -->',
+            f'  <setEventAttribute attr="deviceTime">{dt_call}</setEventAttribute>',
+        ]
+
+    step3b_lines: list[str] = []
+    if body_ts:
+        field_var = body_ts['field']
+        fmt_str   = body_ts['fmt_string']
+        desc      = body_ts['description']
+        step3b_lines.append('')
+        step3b_lines.append(f'  <!-- Step 3b: Override deviceTime from body timestamp ({desc}) -->')
+        if fmt_str == 'epoch_ms':
+            step3b_lines.append(
+                f'  <setEventAttribute attr="_epochSec">divide(${field_var}, 1000)</setEventAttribute>')
+            step3b_lines.append(
+                '  <setEventAttribute attr="deviceTime">$_epochSec</setEventAttribute>')
+        elif fmt_str == 'epoch_s':
+            step3b_lines.append(
+                f'  <setEventAttribute attr="deviceTime">${field_var}</setEventAttribute>')
+        else:
+            step3b_lines.append(
+                f'  <setEventAttribute attr="deviceTime">toDateTime(${field_var}, "{fmt_str}")</setEventAttribute>')
 
     xml_lines += [
         '',
         f'  <!-- Step 3: Extract fields ({_safe_comment(fmt)}) -->',
         extraction,
+        *step3b_lines,
         '',
         '  <!-- Step 4: Set eventType -->',
         f'  <setEventAttribute attr="eventType">{name}-Event</setEventAttribute>',

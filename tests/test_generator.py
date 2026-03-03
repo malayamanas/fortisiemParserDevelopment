@@ -270,3 +270,87 @@ def test_access_log_with_leading_code_classified_as_access_log():
     xml = generate_parser(_TEXT_META, {}, "syslog+text", _APACHE_SAMPLES)
     # Sample 2 has '0  192.168.20.35 ...' body; access_log case must be present
     assert "NCSA Combined" in xml
+
+
+# ── Timestamp format support ──────────────────────────────────────────────────
+
+def test_no_year_syslog_uses_3arg_todatetime():
+    """When syslog header has no year, Step 2 must use 3-arg toDateTime (infers current year)."""
+    xml = generate_parser(_TEXT_META, {}, "syslog+text", _APACHE_SAMPLES)
+    assert "toDateTime($_mon, $_day, $_time)" in xml
+    assert "toDateTime($_mon, $_day, $_year" not in xml
+
+
+def test_year_syslog_uses_4arg_todatetime():
+    """When syslog header has year, Step 2 must use 4-arg toDateTime."""
+    s1 = "Jul 23 10:05:15 2025 host 1.2.3.4 srcip=10.0.0.5 dstip=8.8.8.8"
+    xml = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", [s1])
+    assert "toDateTime($_mon, $_day, $_year, $_time)" in xml
+
+
+def test_no_year_no_samples_uses_4arg_todatetime():
+    """With no samples (safe default has_year=True), Step 2 uses 4-arg toDateTime."""
+    xml = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", [])
+    assert "toDateTime($_mon, $_day, $_year, $_time)" in xml
+
+
+def test_tz_in_syslog_header_uses_5arg_todatetime():
+    """When syslog header has year + timezone, Step 2 must use 5-arg toDateTime."""
+    sample = "Jul 23 10:05:15 2025 +0000 host 1.2.3.4 srcip=10.0.0.5"
+    xml = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", [sample])
+    assert "toDateTime($_mon, $_day, $_year, $_time, $_tz)" in xml
+    assert "gPatTimeZone" in xml
+
+
+_JSON_TS_SAMPLE = (
+    'Jul 23 10:05:15 2025 host 1.2.3.4 TAG: '
+    '{"event":"login","timestamp":"2025-07-23T10:05:15.123456Z","srcip":"10.0.0.1"}'
+)
+
+
+def test_json_body_iso8601_microseconds_triggers_step3b():
+    """JSON body with ISO 8601 microsecond timestamp field generates Step 3b deviceTime."""
+    xml = generate_parser(BASIC_META, {"event": "eventType"}, "syslog+json", [_JSON_TS_SAMPLE])
+    assert "Step 3b" in xml
+    assert "toDateTime($timestamp" in xml
+    assert "SSSSSS" in xml
+
+
+def test_json_body_timestamp_format_string_correct():
+    """The generated toDateTime format string matches the ISO 8601 microseconds pattern."""
+    xml = generate_parser(BASIC_META, {"event": "eventType"}, "syslog+json", [_JSON_TS_SAMPLE])
+    assert "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'" in xml
+
+
+_KV_EPOCH_MS_SAMPLE = "Jul 23 10:05:15 2025 host 1.2.3.4 ts=1753264815000 srcip=10.0.0.1"
+
+
+def test_kv_epoch_ms_body_timestamp_triggers_step3b():
+    """KV body with 13-digit epoch 'ts' field generates Step 3b with divide()."""
+    xml = generate_parser(BASIC_META, {"srcip": "srcIpAddr"}, "syslog+kv", [_KV_EPOCH_MS_SAMPLE])
+    assert "Step 3b" in xml
+    assert "divide($ts, 1000)" in xml
+    assert "deviceTime" in xml
+
+
+_KV_EPOCH_S_SAMPLE = "Jul 23 10:05:15 2025 host 1.2.3.4 timestamp=1753264815 srcip=10.0.0.1"
+
+
+def test_kv_epoch_s_body_timestamp_triggers_step3b():
+    """KV body with 10-digit epoch 'timestamp' field generates direct Step 3b assignment."""
+    xml = generate_parser(BASIC_META, {"srcip": "srcIpAddr"}, "syslog+kv", [_KV_EPOCH_S_SAMPLE])
+    assert "Step 3b" in xml
+    assert "$timestamp" in xml
+    assert "divide" not in xml
+
+
+def test_no_body_timestamp_skips_step3b():
+    """KV body without a timestamp field must not emit Step 3b."""
+    xml = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", [])
+    assert "Step 3b" not in xml
+
+
+def test_syslog_text_format_skips_body_timestamp_step3b():
+    """syslog+text format must not emit Step 3b (body timestamp not applicable)."""
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _ACCESS_LOG_SAMPLES)
+    assert "Step 3b" not in xml
