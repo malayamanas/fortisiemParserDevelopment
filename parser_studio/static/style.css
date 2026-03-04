@@ -102,3 +102,9 @@ details summary { cursor: pointer; font-size: .8rem; color: #60a5fa; font-weight
 .detail-table td { border: none; padding: .2rem .4rem; }
 .detail-key { font-weight: 600; width: 180px; color: #94a3b8; }
 .mono { font-family: monospace; font-size: .8rem; color: #a5f3fc; }
+
+/* Staging table drop cells */
+td.staging-cell { min-width: 130px; padding: .45rem .65rem; vertical-align: middle; }
+/* Draggable individual token cells in Token Matrix */
+td.ws-cell.draggable-cell { cursor: grab; user-select: none; }
+td.ws-cell.draggable-cell:hover { background: #1a2035; }

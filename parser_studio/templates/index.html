@@ -56,6 +56,10 @@
       <label>Anchor tag (unique string in log)
         <input type="text" x-model="meta.anchor" placeholder="VENDOR_LOGTAG"/>
       </label>
+      <label style="grid-column:1/-1">Use Case Description
+        <textarea x-model="meta.usecase" rows="2"
+                  placeholder="Describe the log source and key fields of interest (e.g., &quot;Palo Alto firewall traffic log — source/dest IPs, ports, and allow/deny action&quot;)"></textarea>
+      </label>
     </div>
   </section>
 
@@ -84,7 +88,7 @@
     <h2>Token Matrix
       <span class="badge" x-text="wsMatrix.length + ' tokens \u00d7 ' + sampleCount + ' samples'"></span>
     </h2>
-    <p class="hint">Each row is one whitespace-split position. Green = same value in every sample. Drag a row onto an EAT cell below to auto-assign a mapping.</p>
+    <p class="hint">Each row is one whitespace-split position. Green = same value in every sample. Drag individual <strong>sample cells</strong> into the Staging Table below, or drag a <strong>row</strong> onto an EAT cell in Field Mappings.</p>
     <div style="overflow-x:auto">
       <table class="mapping-table" style="white-space:nowrap">
         <thead>
@@ -101,18 +105,90 @@
                 :class="dragToken?.token === row.token ? 'dragging' : ''"
                 :style="row.consistent ? 'background:#0d2818' : ''"
                 draggable="true"
-                @dragstart="startDragToken($event, row)"
+                @dragstart.self="startDragToken($event, row)"
                 @dragend="dragEnd()">
               <td class="mono" x-text="row.token"></td>
               <template x-for="(val, vi) in row.values" :key="vi">
-                <td class="mono"
+                <td class="mono ws-cell"
+                    :class="val ? 'draggable-cell' : ''"
+                    :draggable="val !== ''"
                     :style="val === '' ? 'color:#4b5563' : (row.consistent ? 'color:#4ade80' : 'color:#e2e8f0')"
-                    x-text="val === '' ? '\u2014' : val"></td>
+                    @dragstart.stop="val && startDragCell($event, row, vi, val)"
+                    x-text="val === '' ? '\u2014' : val">
+                </td>
               </template>
             </tr>
           </template>
         </tbody>
       </table>
+    </div>
+  </section>
+
+  <!-- FIELD MAPPING STAGING TABLE -->
+  <section class="panel" x-show="wsMatrix.length > 0">
+    <h2>Field Mapping Staging Table
+      <button @click="buildStagingFromUsecase()" class="btn btn-sm btn-secondary" style="margin-left:.5rem">&#8635; Rebuild from Use Case</button>
+      <button @click="addStagingRow()" class="btn btn-sm" style="margin-left:.5rem">+ Add Row</button>
+    </h2>
+    <p class="hint">Drag token cells from the Token Matrix above into the sample columns to assign log positions to EAT fields. Click <strong>Generate Field Mapping</strong> to push assignments to the Field Mappings section below.</p>
+    <div style="overflow-x:auto">
+      <table class="mapping-table" style="white-space:nowrap">
+        <thead>
+          <tr>
+            <th style="min-width:190px">Field in Log (EAT)</th>
+            <template x-for="(_, si) in Array.from({length: sampleCount})" :key="si">
+              <th x-text="'Sample ' + (si + 1)"></th>
+            </template>
+            <th style="width:44px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="(sf, sfi) in stagingFields" :key="sfi">
+            <tr>
+              <td>
+                <input type="text" list="eat-names-list"
+                       x-model="stagingFields[sfi].eat"
+                       placeholder="Type or select EAT name…"
+                       style="width:100%;min-width:160px;font-size:.8rem;padding:.25rem .4rem"/>
+              </td>
+              <template x-for="(_, si) in Array.from({length: sampleCount})" :key="si">
+                <td class="staging-cell"
+                    @dragover.prevent="$el.classList.add('drop-target')"
+                    @dragleave="$el.classList.remove('drop-target')"
+                    @drop.prevent="dropOnStagingCell(sfi, si, $el)">
+                  <template x-if="sf.values[si]">
+                    <span>
+                      <span class="mono" style="color:#a5f3fc;font-size:.85rem" x-text="sf.values[si]"></span>
+                      <span class="badge" style="font-size:.65rem;margin-left:.25rem;vertical-align:middle" x-text="sf.tokens[si]"></span>
+                    </span>
+                  </template>
+                  <template x-if="!sf.values[si]">
+                    <span style="color:#4b5563;font-size:.8rem">drop here</span>
+                  </template>
+                </td>
+              </template>
+              <td style="text-align:center;padding:.3rem .5rem">
+                <button @click="stagingFields.splice(sfi, 1)" class="btn btn-danger btn-sm" title="Remove row">&#10005;</button>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="stagingFields.length === 0">
+            <td :colspan="sampleCount + 2" class="hint" style="text-align:center;padding:.75rem">
+              No fields staged. Add a Use Case Description in Parser Metadata and click <strong>Rebuild from Use Case</strong>, or click <strong>+ Add Row</strong>.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:1rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+      <button @click="generateFieldMapping()" class="btn btn-primary"
+              :disabled="stagingFields.length === 0">
+        Generate Field Mapping &#8594;
+      </button>
+      <span class="hint" style="margin:0">
+        <span x-text="stagingFields.filter(sf => sf.eat && sf.tokens.some(t => t)).length"></span>
+        of <span x-text="stagingFields.length"></span> row(s) have token assignments
+      </span>
     </div>
   </section>
 
@@ -658,6 +734,13 @@
     </div>
   </section>
 
+  <!-- EAT autocomplete list (shared by Staging Table inputs) -->
+  <datalist id="eat-names-list">
+    <template x-for="eat in allEats" :key="eat">
+      <option :value="eat"></option>
+    </template>
+  </datalist>
+
 </div>
 
 <script>
@@ -665,7 +748,7 @@ function studioApp() {
   return {
     // Metadata
     meta: { name: '', scope: 'enabled', parser_type: 'User',
-            vendor: '', model: '', version: 'ANY', anchor: '' },
+            vendor: '', model: '', version: 'ANY', anchor: '', usecase: '' },
     deviceTypes: [], vendors: [], filteredModels: [],
 
     // Samples
@@ -677,7 +760,11 @@ function studioApp() {
     tokenMatrix: [], wsMatrix: [], sampleCount: 0,
 
     // Drag-and-drop state
-    dragToken: null,
+    dragToken: null,          // row-level drag from Token Matrix → Field Mappings EAT cell
+    dragCell: null,           // cell-level drag from Token Matrix → Staging Table cell
+
+    // Field Mapping Staging Table
+    stagingFields: [],        // [{eat:'', values:[], tokens:[]}]
 
     // AI EAT suggestion
     aiSuggestAvailable: false,
@@ -832,6 +919,8 @@ function studioApp() {
           this.confirmedMappings[field] =
             (!isPositional && top?.score > 0 ? top.eat : null) || '_skip';
         }
+        // Auto-populate staging table from use case description
+        this.buildStagingFromUsecase();
       } finally { this.analyzing = false; }
     },
 
@@ -845,19 +934,23 @@ function studioApp() {
 
     dragEnd() {
       this.dragToken = null;
+      this.dragCell = null;
     },
 
     dropOnField(field, cell) {
       cell.classList.remove('drop-target');
-      if (!this.dragToken) return;
-      const eat = this.guessEatFromValues(this.dragToken.values);
+      let values;
+      if (this.dragToken)     values = this.dragToken.values;
+      else if (this.dragCell) values = [this.dragCell.value];
+      else return;
+      const eat = this.guessEatFromValues(values);
       if (eat && this.allEats.includes(eat)) {
         this.confirmedMappings = {...this.confirmedMappings, [field]: eat};
-        // Brief green flash to confirm success
         cell.classList.add('drop-ok');
         setTimeout(() => cell.classList.remove('drop-ok'), 800);
       }
       this.dragToken = null;
+      this.dragCell  = null;
     },
 
     guessEatFromValues(values) {
@@ -879,6 +972,137 @@ function studioApp() {
       if (v.every(x => portRe.test(x) && +x <= 65535 && +x > 0)) return 'srcIpPort';
       if (v.every(x => /^\d+$/.test(x)))      return 'recvBytes64';
       return null;
+    },
+
+    // ── Cell-level drag (Token Matrix sample cell → Staging Table) ────────────
+
+    startDragCell(e, row, sampleIdx, val) {
+      if (!val) return;
+      this.dragCell = { token: row.token, sampleIdx, value: val };
+      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.setData('text/plain', val);
+    },
+
+    dropOnStagingCell(sfi, sampleIdx, cell) {
+      cell.classList.remove('drop-target');
+      if (!this.dragCell) return;
+      const sf = this.stagingFields[sfi];
+      // Replace arrays to ensure Alpine reactivity
+      const newValues = sf.values.map((v, i) => i === sampleIdx ? this.dragCell.value : v);
+      const newTokens = sf.tokens.map((t, i) => i === sampleIdx ? this.dragCell.token : t);
+      this.stagingFields[sfi] = { ...sf, values: newValues, tokens: newTokens };
+      this.dragCell = null;
+      cell.classList.add('drop-ok');
+      setTimeout(() => cell.classList.remove('drop-ok'), 800);
+    },
+
+    // ── Staging Table ─────────────────────────────────────────────────────────
+
+    addStagingRow() {
+      this.stagingFields.push({
+        eat:    '',
+        values: Array(this.sampleCount).fill(''),
+        tokens: Array(this.sampleCount).fill(''),
+      });
+    },
+
+    buildStagingFromUsecase() {
+      const eats = this.guessEatsFromUsecase(this.meta.usecase || '', this.wsMatrix);
+      this.stagingFields = eats.map(eat => ({
+        eat,
+        values: Array(this.sampleCount).fill(''),
+        tokens: Array(this.sampleCount).fill(''),
+      }));
+    },
+
+    guessEatsFromUsecase(desc, matrix) {
+      const d      = (desc || '').toLowerCase();
+      const result = [];
+      const seen   = new Set();
+      const add    = (...eats) => {
+        for (const e of eats) { if (!seen.has(e)) { seen.add(e); result.push(e); } }
+      };
+
+      // Core fields always useful
+      add('eventType', 'eventSeverity', 'deviceTime');
+
+      // Keyword-driven rules
+      const rules = [
+        { kw: ['firewall','traffic','network','netflow','filter','permit','deny','iptable','acl','packet'],
+          eats: ['srcIpAddr','destIpAddr','srcIpPort','destIpPort','ipProto','eventAction'] },
+        { kw: ['web','http','apache','nginx','iis','access log','proxy','url','request'],
+          eats: ['srcIpAddr','httpMethod','uriStem','httpStatusCode','recvBytes64','userAgent'] },
+        { kw: ['dns','domain','resolver','query','lookup'],
+          eats: ['srcIpAddr','destIpAddr','domainName'] },
+        { kw: ['auth','login','logon','logoff','sso','ldap','kerberos','authentication','credential'],
+          eats: ['user','srcIpAddr','srcHostName','domain'] },
+        { kw: ['vpn','remote access','tunnel','ssl vpn','ipsec'],
+          eats: ['user','srcIpAddr','destIpAddr','srcHostName','sessionId'] },
+        { kw: ['endpoint','process','execution','malware','edr','antivirus','threat','ransomware','virus'],
+          eats: ['srcHostName','procName','procId','user','fileName','filePath','hashMD5','virusName','threatLevel'] },
+        { kw: ['windows','event log','winevent','winlog','audit','active directory'],
+          eats: ['user','srcHostName','domain','procName','winEventId'] },
+        { kw: ['email','smtp','mail','phishing','spam'],
+          eats: ['user','srcIpAddr','destIpAddr'] },
+        { kw: ['ssh','sftp','ftp','telnet','rdp','shell'],
+          eats: ['user','srcIpAddr','destIpAddr','srcHostName'] },
+        { kw: ['cloud','aws','azure','gcp','s3','bucket'],
+          eats: ['user','srcIpAddr','eventType'] },
+      ];
+      for (const rule of rules) {
+        if (rule.kw.some(k => d.includes(k))) add(...rule.eats);
+      }
+
+      // Pattern-based hints from sample token values
+      const ipRe   = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+      const portRe = /^\d{1,5}$/;
+      const methRe = /^(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)$/i;
+      const statRe = /^[1-5]\d{2}$/;
+      const urlRe  = /^\/\S+/;
+      for (const row of (matrix || [])) {
+        const vals = row.values.filter(v => v);
+        if (!vals.length) continue;
+        if (vals.every(v => ipRe.test(v)))                         add('srcIpAddr', 'destIpAddr');
+        if (vals.every(v => portRe.test(v) && +v<=65535 && +v>0)) add('srcIpPort', 'destIpPort');
+        if (vals.every(v => methRe.test(v)))                       add('httpMethod');
+        if (vals.every(v => statRe.test(v)))                       add('httpStatusCode');
+        if (vals.every(v => urlRe.test(v)))                        add('uriStem');
+      }
+
+      // Fallback defaults if description is empty or unrecognised
+      if (result.length <= 3) add('srcIpAddr', 'destIpAddr', 'msg');
+
+      return result;
+    },
+
+    generateFieldMapping() {
+      const newMappings    = {};
+      const newFields      = {};
+      const newSuggestions = {};
+
+      for (const sf of this.stagingFields) {
+        if (!sf.eat) continue;
+        // Find the token used most across samples
+        const counts = {};
+        for (const tok of sf.tokens) {
+          if (tok) counts[tok] = (counts[tok] || 0) + 1;
+        }
+        const tok = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+        if (!tok) continue;
+        newMappings[tok]    = sf.eat;
+        newFields[tok]      = { values: sf.values.filter(v => v).slice(0, 3), optional: false };
+        newSuggestions[tok] = [{ eat: sf.eat, score: 100, confidence: 'high' }];
+      }
+
+      this.fields            = newFields;
+      this.confirmedMappings = newMappings;
+      this.suggestions       = newSuggestions;
+
+      // Scroll to Field Mappings panel
+      this.$nextTick(() => {
+        const panel = document.querySelector('[x-show="detectedFormat"]');
+        if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
     },
 
     async generateParser() {
