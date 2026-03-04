@@ -19,6 +19,7 @@ _TS_FIELD_NAMES = frozenset({
     'created_at', 'createdat', 'event_time', 'eventtime',
     'log_time', 'logtime', '@timestamp',
     'createdAt', 'eventTime', 'deviceTime', 'startTime', 'endTime',
+    'req_time',   # Apache NCSA access log body timestamp (e.g. 17/Sep/2009:13:27:37 -0700)
 })
 
 # (value_pattern, toDateTime format string or epoch sentinel, description)
@@ -31,10 +32,12 @@ _TS_VALUE_PATTERNS = [
      "yyyy-MM-dd'T'HH:mm:ss'Z'", "ISO 8601 UTC"),
     (re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:?\d{2}$'),
      "yyyy-MM-dd'T'HH:mm:ssXXX", "ISO 8601 with TZ offset"),
+    (re.compile(r'^\d{1,2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2}\s[+-]\d{4}$'),
+     "dd/MMM/yyyy:HH:mm:ss Z", "Apache NCSA access log timestamp with TZ"),
     (re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$'),
-     "yyyy-MM-dd HH:mm:ss", "space-separated datetime"),
-    (re.compile(r'^\d{13}$'), "epoch_ms", "epoch milliseconds"),
-    (re.compile(r'^\d{10}$'), "epoch_s", "epoch seconds"),
+     "yyyy-MM-dd HH:mm:ss", "space-separated datetime (no TZ; verify UTC assumption)"),
+    (re.compile(r'^\d{13}$'), "epoch_ms", "epoch milliseconds (UTC)"),
+    (re.compile(r'^\d{10}$'), "epoch_s", "epoch seconds (UTC)"),
 ]
 
 
@@ -182,8 +185,9 @@ def _generate_switch_extraction(structures: list[str]) -> str:
             lines += [
                 '      <case>',
                 '        <!-- NCSA Combined Log Format: [code] client ident user [ts] "method path proto" status bytes -->',
+                '        <!-- _req_time captures the TZ-aware timestamp for Step 3b deviceTime override -->',
                 '        <collectFieldsByRegex src="$_body">',
-                '          <regex><![CDATA[(?:\\d+\\s+)?<srcIpAddr:gPatIpAddr>\\s+<:gPatStr>\\s+<_user:gPatStr>\\s+\\[<:gPatMesgBodyMin>\\]\\s+"<httpMethod:gPatStr>\\s+<uriStem:gPatStr>\\s+<:gPatStr>"\\s+<httpStatusCode:gPatInt>\\s+<recvBytes64:gPatStr>]]></regex>',
+                '          <regex><![CDATA[(?:\\d+\\s+)?<srcIpAddr:gPatIpAddr>\\s+<:gPatStr>\\s+<_user:gPatStr>\\s+\\[<_req_time:gPatMesgBodyMin>\\]\\s+"<httpMethod:gPatStr>\\s+<uriStem:gPatStr>\\s+<:gPatStr>"\\s+<httpStatusCode:gPatInt>\\s+<recvBytes64:gPatStr>]]></regex>',
                 '        </collectFieldsByRegex>',
                 '      </case>',
             ]
@@ -297,9 +301,9 @@ def generate_parser(meta: dict, mappings: dict[str, str],
 
     extraction = _extraction_element(fmt, mappings, samples)
 
-    # Detect body timestamp field for Step 3b (JSON/KV formats only)
+    # Detect body timestamp field for Step 3b (JSON/KV/text formats)
     body_ts = None
-    if fmt in ('syslog+json', 'json', 'syslog+kv', 'syslog+bracket-kv') and samples:
+    if fmt in ('syslog+json', 'json', 'syslog+kv', 'syslog+bracket-kv', 'syslog+text') and samples:
         try:
             sampled_fields = extract_fields(samples, fmt)
             body_ts = _detect_body_timestamp(sampled_fields)
@@ -352,14 +356,17 @@ def generate_parser(meta: dict, mappings: dict[str, str],
 
     if fmt.startswith("syslog"):
         if has_year and has_tz:
-            dt_call = 'toDateTime($_mon, $_day, $_year, $_time, $_tz)'
+            dt_call    = 'toDateTime($_mon, $_day, $_year, $_time, $_tz)'
+            dt_comment = 'Step 2: Set deviceTime from syslog header (TZ-aware; FortiSIEM normalises to UTC)'
         elif has_year:
-            dt_call = 'toDateTime($_mon, $_day, $_year, $_time)'
+            dt_call    = 'toDateTime($_mon, $_day, $_year, $_time)'
+            dt_comment = 'Step 2: Set deviceTime from syslog header (no TZ; assumes UTC)'
         else:
-            dt_call = 'toDateTime($_mon, $_day, $_time)'
+            dt_call    = 'toDateTime($_mon, $_day, $_time)'
+            dt_comment = 'Step 2: Set deviceTime from syslog header (no year or TZ; assumes UTC)'
         xml_lines += [
             '',
-            '  <!-- Step 2: Set deviceTime from syslog header -->',
+            f'  <!-- {dt_comment} -->',
             f'  <setEventAttribute attr="deviceTime">{dt_call}</setEventAttribute>',
         ]
 
@@ -370,7 +377,14 @@ def generate_parser(meta: dict, mappings: dict[str, str],
         desc      = body_ts['description']
         step3b_lines.append('')
         step3b_lines.append(f'  <!-- Step 3b: Override deviceTime from body timestamp ({desc}) -->')
-        if fmt_str == 'epoch_ms':
+        if fmt == 'syslog+text' and field_var == 'req_time':
+            # _req_time is captured as a private var by the access_log switch/case.
+            # The <when> guard ensures this only fires for access-log lines (not error-log lines).
+            step3b_lines.append('  <when test="exist _req_time">')
+            step3b_lines.append(
+                f'    <setEventAttribute attr="deviceTime">toDateTime($_req_time, "{fmt_str}")</setEventAttribute>')
+            step3b_lines.append('  </when>')
+        elif fmt_str == 'epoch_ms':
             step3b_lines.append(
                 f'  <setEventAttribute attr="_epochSec">divide(${field_var}, 1000)</setEventAttribute>')
             step3b_lines.append(

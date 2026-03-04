@@ -350,7 +350,36 @@ def test_no_body_timestamp_skips_step3b():
     assert "Step 3b" not in xml
 
 
-def test_syslog_text_format_skips_body_timestamp_step3b():
-    """syslog+text format must not emit Step 3b (body timestamp not applicable)."""
-    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _ACCESS_LOG_SAMPLES)
+def test_syslog_text_generic_body_skips_step3b():
+    """syslog+text with no recognizable body timestamp must not emit Step 3b."""
+    generic = ["Jul 23 10:05:15 2025 web01 192.168.1.1 some plain text message without a timestamp"]
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", generic)
     assert "Step 3b" not in xml
+
+
+# ── NCSA body timestamp → Step 3b UTC deviceTime ─────────────────────────────
+
+_NCSA_TS_SAMPLES = [
+    "Sep 17 13:27:37 example.com WebLog "
+    "192.168.20.35 - - [17/Sep/2009:13:27:37 -0700] "
+    '"GET /icons/apache_pb2.gif HTTP/1.1" 200 2414',
+]
+
+
+def test_syslog_text_ncsa_timestamp_triggers_step3b():
+    """syslog+text with NCSA access log timestamp generates Step 3b with TZ-aware deviceTime."""
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _NCSA_TS_SAMPLES)
+    assert "Step 3b" in xml
+    assert "dd/MMM/yyyy:HH:mm:ss Z" in xml
+
+
+def test_syslog_text_ncsa_step3b_when_guard():
+    """Step 3b for NCSA syslog+text must use <when test='exist _req_time'> so error-log lines are unaffected."""
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _NCSA_TS_SAMPLES)
+    assert 'exist _req_time' in xml
+
+
+def test_syslog_text_access_log_regex_captures_req_time():
+    """Access log switch/case must capture _req_time (private) for the deviceTime Step 3b override."""
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _NCSA_TS_SAMPLES)
+    assert "_req_time:gPatMesgBodyMin" in xml
