@@ -80,24 +80,29 @@
   </section>
 
   <!-- TOKEN MATRIX PANEL -->
-  <section class="panel" x-show="tokenMatrix.length > 0">
+  <section class="panel" x-show="wsMatrix.length > 0">
     <h2>Token Matrix
-      <span class="badge" x-text="tokenMatrix.length + ' tokens \u00d7 ' + sampleCount + ' samples'"></span>
+      <span class="badge" x-text="wsMatrix.length + ' tokens \u00d7 ' + sampleCount + ' samples'"></span>
     </h2>
-    <p class="hint">Each row is a token extracted from the logs. Green = same value across all samples. Blank = token absent in that sample.</p>
+    <p class="hint">Each row is one whitespace-split position. Green = same value in every sample. Drag a row onto an EAT cell below to auto-assign a mapping.</p>
     <div style="overflow-x:auto">
       <table class="mapping-table" style="white-space:nowrap">
         <thead>
           <tr>
-            <th style="min-width:180px">Token</th>
+            <th style="min-width:90px">Token</th>
             <template x-for="(_, si) in Array.from({length: sampleCount})" :key="si">
               <th x-text="'Sample ' + (si + 1)"></th>
             </template>
           </tr>
         </thead>
         <tbody>
-          <template x-for="row in tokenMatrix" :key="row.token">
-            <tr :style="row.consistent ? 'background:#0d2818' : ''">
+          <template x-for="row in wsMatrix" :key="row.token">
+            <tr class="ws-row"
+                :class="dragToken?.token === row.token ? 'dragging' : ''"
+                :style="row.consistent ? 'background:#0d2818' : ''"
+                draggable="true"
+                @dragstart="startDragToken($event, row)"
+                @dragend="dragEnd()">
               <td class="mono" x-text="row.token"></td>
               <template x-for="(val, vi) in row.values" :key="vi">
                 <td class="mono"
@@ -124,7 +129,9 @@
           <tr :class="confirmedMappings[field] === '_skip' ? 'skipped' : ''">
             <td x-text="field"></td>
             <td class="values" x-text="(info.values || []).join(', ')"></td>
-            <td>
+            <td @dragover.prevent="$el.classList.add('drop-target')"
+                @dragleave="$el.classList.remove('drop-target')"
+                @drop.prevent="dropOnField(field, $el)">
               <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">
                 <select x-model="confirmedMappings[field]">
                   <option value="_skip">-- skip --</option>
@@ -667,7 +674,10 @@ function studioApp() {
     // Analysis results
     analyzing: false, analyzeError: '',
     detectedFormat: '', fields: {}, suggestions: {},
-    tokenMatrix: [], sampleCount: 0,
+    tokenMatrix: [], wsMatrix: [], sampleCount: 0,
+
+    // Drag-and-drop state
+    dragToken: null,
 
     // AI EAT suggestion
     aiSuggestAvailable: false,
@@ -809,6 +819,7 @@ function studioApp() {
         this.fields = data.fields;
         this.suggestions = data.mappings;
         this.tokenMatrix = data.token_matrix || [];
+        this.wsMatrix    = data.whitespace_matrix || [];
         this.sampleCount = data.sample_count || 0;
         // Wait for Alpine to render x-for options before setting confirmedMappings,
         // otherwise x-model on <select> tries to set .value before options exist
@@ -822,6 +833,52 @@ function studioApp() {
             (!isPositional && top?.score > 0 ? top.eat : null) || '_skip';
         }
       } finally { this.analyzing = false; }
+    },
+
+    // ── Drag-and-drop: whitespace token → EAT cell ───────────────────────────
+
+    startDragToken(e, row) {
+      this.dragToken = row;
+      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.setData('text/plain', row.token);
+    },
+
+    dragEnd() {
+      this.dragToken = null;
+    },
+
+    dropOnField(field, cell) {
+      cell.classList.remove('drop-target');
+      if (!this.dragToken) return;
+      const eat = this.guessEatFromValues(this.dragToken.values);
+      if (eat && this.allEats.includes(eat)) {
+        this.confirmedMappings = {...this.confirmedMappings, [field]: eat};
+        // Brief green flash to confirm success
+        cell.classList.add('drop-ok');
+        setTimeout(() => cell.classList.remove('drop-ok'), 800);
+      }
+      this.dragToken = null;
+    },
+
+    guessEatFromValues(values) {
+      const v = values.filter(x => x);
+      if (!v.length) return null;
+      const ipRe         = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+      const httpStatusRe = /^[1-5]\d{2}$/;
+      const httpMethodRe = /^(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)$/i;
+      const isoRe        = /^\d{4}-\d{2}-\d{2}[T ]/;
+      const urlRe        = /^\/\S*/;
+      const macRe        = /^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$/;
+      const portRe       = /^\d{1,5}$/;
+      if (v.every(x => ipRe.test(x)))         return 'srcIpAddr';
+      if (v.every(x => httpStatusRe.test(x))) return 'httpStatusCode';
+      if (v.every(x => httpMethodRe.test(x))) return 'httpMethod';
+      if (v.every(x => isoRe.test(x)))        return 'deviceTime';
+      if (v.every(x => urlRe.test(x)))        return 'uriStem';
+      if (v.every(x => macRe.test(x)))        return 'srcMacAddr';
+      if (v.every(x => portRe.test(x) && +x <= 65535 && +x > 0)) return 'srcIpPort';
+      if (v.every(x => /^\d+$/.test(x)))      return 'recvBytes64';
+      return null;
     },
 
     async generateParser() {

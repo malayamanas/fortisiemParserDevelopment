@@ -30,7 +30,7 @@ def _load_device_types_from_file() -> list[tuple]:
                 entries.append((text, "ANY", "ANY"))
     return entries
 from parser_studio.detector import detect_format
-from parser_studio.extractor import extract_fields, build_token_matrix
+from parser_studio.extractor import extract_fields, build_token_matrix, build_whitespace_matrix
 from parser_studio.mapper import suggest_mappings
 from parser_studio.generator import generate_parser
 from parser_studio.simulator import simulate, test_against_library
@@ -92,14 +92,16 @@ def api_analyze():
     eat_rows = get_event_attributes(DB_PATH)
     field_values = {f: info.get("values", []) for f, info in fields.items()}
     mappings = suggest_mappings(list(fields.keys()), eat_rows, field_values)
-    matrix = build_token_matrix(samples, fmt)
+    matrix   = build_token_matrix(samples, fmt)
+    ws_matrix = build_whitespace_matrix(samples)
 
     return jsonify({
-        "format":       fmt,
-        "fields":       fields,
-        "mappings":     mappings,
-        "token_matrix": matrix,
-        "sample_count": len(samples),
+        "format":            fmt,
+        "fields":            fields,
+        "mappings":          mappings,
+        "token_matrix":      matrix,
+        "whitespace_matrix": ws_matrix,
+        "sample_count":      len(samples),
     })
 
 

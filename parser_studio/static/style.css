@@ -56,6 +56,16 @@ tr.skipped { opacity: .35; }
 tr:hover td { background: #1a2035; }
 th:hover { background: #161b27; }
 
+/* Drag-and-drop: whitespace token rows */
+tr.ws-row { cursor: grab; }
+tr.ws-row:active { cursor: grabbing; }
+tr.ws-row.dragging td { opacity: .45; background: #12171f; }
+
+/* Drop target: EAT cell in Field Mappings */
+td.drop-target { outline: 2px dashed #3b82f6; background: #0d1d35 !important; }
+td.drop-ok     { outline: 2px solid #4ade80;  background: #0d2818 !important;
+                 transition: background .25s; }
+
 .toolbar { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
 
 .xml-preview { background: #0d1117; color: #c9d1d9; padding: 1rem;

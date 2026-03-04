@@ -1,5 +1,5 @@
 from tests.conftest import SAMPLE_SYSLOG_JSON, SAMPLE_SYSLOG_KV, SAMPLE_PURE_JSON
-from parser_studio.extractor import extract_fields, build_token_matrix
+from parser_studio.extractor import extract_fields, build_token_matrix, build_whitespace_matrix
 
 def test_extract_json_fields():
     fields = extract_fields([SAMPLE_SYSLOG_JSON], "syslog+json")
@@ -105,6 +105,47 @@ def test_syslog_text_access_log_with_leading_code():
     fields = extract_fields([sample], "syslog+text")
     assert "client_ip" in fields
     assert fields["client_ip"]["values"][0] == "192.168.20.35"
+
+
+def test_whitespace_matrix_splits_by_whitespace():
+    s1 = "Jul 23 10:05:15  host  1.2.3.4"   # double spaces
+    s2 = "Jul\t24\t10:06:00\thost\t5.6.7.8"  # tabs
+    rows = build_whitespace_matrix([s1, s2])
+    tokens = [r['token'] for r in rows]
+    assert 'tok_0' in tokens
+    assert 'tok_4' in tokens   # 5 tokens per sample
+    assert len(rows) == 5
+
+
+def test_whitespace_matrix_per_sample_values():
+    s1 = "Jul 23 10:05:15 host 1.2.3.4"
+    s2 = "Aug 24 11:06:00 host 5.6.7.8"
+    rows = build_whitespace_matrix([s1, s2])
+    tok4 = next(r for r in rows if r['token'] == 'tok_4')
+    assert tok4['values'] == ['1.2.3.4', '5.6.7.8']
+    assert tok4['consistent'] is False
+
+
+def test_whitespace_matrix_consistent_flag():
+    s1 = "Jul 23 10:05:15 web01 1.2.3.4"
+    s2 = "Aug 24 11:06:00 web01 5.6.7.8"
+    rows = build_whitespace_matrix([s1, s2])
+    hostname_row = next(r for r in rows if r['token'] == 'tok_3')
+    assert hostname_row['values'] == ['web01', 'web01']
+    assert hostname_row['consistent'] is True
+
+
+def test_whitespace_matrix_empty_samples():
+    assert build_whitespace_matrix([]) == []
+    assert build_whitespace_matrix(['', '  ']) == []
+
+
+def test_whitespace_matrix_unequal_lengths():
+    s1 = "Jul 23 10:05:15 host"
+    s2 = "Jul 23 10:05:15 host extra_token"
+    rows = build_whitespace_matrix([s1, s2])
+    tok4 = next(r for r in rows if r['token'] == 'tok_4')
+    assert tok4['values'] == ['', 'extra_token']
 
 
 def test_token_matrix_absent_token_is_empty_string():
