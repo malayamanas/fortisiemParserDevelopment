@@ -66,20 +66,17 @@
   <!-- SAMPLES PANEL -->
   <section class="panel">
     <h2>Event Log Samples
-      <button @click="addSample()" class="btn btn-sm">+ Add Sample</button>
+      <span class="badge" x-text="samples.length + (samples.length === 1 ? ' line' : ' lines')"></span>
     </h2>
-    <template x-for="(s, i) in samples" :key="i">
-      <div class="sample-block">
-        <div class="sample-header">
-          <span x-text="'Sample ' + (i+1)"></span>
-          <button x-show="samples.length > 1" @click="removeSample(i)" class="btn btn-danger btn-sm">&#10005;</button>
-        </div>
-        <textarea x-model="samples[i]" rows="3" placeholder="Paste raw log line here..."></textarea>
-      </div>
-    </template>
-    <button @click="analyze()" class="btn btn-primary" :disabled="analyzing">
-      <span x-text="analyzing ? 'Analyzing...' : 'Analyze Samples \u2192'"></span>
-    </button>
+    <p class="hint">Paste one or more raw log lines — each non-empty line is treated as a separate sample. Blank lines are ignored.</p>
+    <textarea x-model="rawSamples" rows="8" style="font-family:monospace;font-size:.8rem"
+              placeholder="Paste raw log lines here, one per line:&#10;192.168.1.1 - - [04/Mar/2026:02:12:45 +0530] &quot;GET /index.html HTTP/1.1&quot; 200 1234&#10;192.168.1.2 - - [04/Mar/2026:02:12:46 +0530] &quot;POST /api HTTP/1.1&quot; 401 381"></textarea>
+    <div style="margin-top:.75rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+      <button @click="analyze()" class="btn btn-primary" :disabled="analyzing || samples.length === 0">
+        <span x-text="analyzing ? 'Analyzing...' : 'Analyze Samples \u2192'"></span>
+      </button>
+      <button x-show="rawSamples.trim()" @click="rawSamples = ''" class="btn btn-secondary btn-sm">Clear</button>
+    </div>
     <p x-show="analyzeError" class="error" x-text="analyzeError"></p>
   </section>
 
@@ -762,7 +759,10 @@ function studioApp() {
     deviceTypes: [], vendors: [], filteredModels: [],
 
     // Samples
-    samples: [''],
+    rawSamples: '',
+    get samples() {
+      return this.rawSamples.split('\n').map(l => l.trim()).filter(l => l);
+    },
 
     // Analysis results
     analyzing: false, analyzeError: '',
@@ -904,8 +904,6 @@ function studioApp() {
       this.addParser.model = '';
     },
 
-    addSample() { this.samples.push(''); },
-    removeSample(i) { this.samples.splice(i, 1); },
 
     async analyze() {
       this.analyzing = true; this.analyzeError = '';
