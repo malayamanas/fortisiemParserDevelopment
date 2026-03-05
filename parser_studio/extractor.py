@@ -7,7 +7,7 @@ _KV_PLAIN   = re.compile(r'(\b\w[\w\s]{0,20}?)=([^,\s"\']+)')
 _KV_BRACKET = re.compile(r'\[([\w\s]+?)\]=([^\s,]+)')
 
 # syslog+text body structure patterns for structured extraction
-# NCSA Combined Log Format: [optional-code] IP ident authuser [ts] "request" status bytes
+# NCSA Combined Log Format: [optional-code] IP ident authuser [ts] "request" status bytes ["ref" "ua"]
 _NCSA_ACCESS_LOG_RE = re.compile(
     r'^(?:\d+\s+)?'                              # optional leading code
     r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+' # client_ip
@@ -15,6 +15,7 @@ _NCSA_ACCESS_LOG_RE = re.compile(
     r'\[([^\]]+)\]\s+'                           # req_time in brackets
     r'"([^"]*)"\s+'                              # request in quotes
     r'(\d+)\s+(\S+)'                             # status_code, bytes
+    r'(?:\s+"([^"]*)"\s+"([^"]*)")?'             # optional: referer, user_agent
 )
 # Error log: [timestamp] [module:level] [pid NNN] message
 _SYSLOG_TEXT_ERROR_RE = re.compile(
@@ -92,7 +93,7 @@ def _extract_one(raw: str, fmt: str) -> dict[str, str]:
     # syslog+text: try structured body patterns before falling back to tokens
     m = _NCSA_ACCESS_LOG_RE.match(body)
     if m:
-        return {
+        fields: dict[str, str] = {
             "client_ip":   m.group(1),
             "ident":       m.group(2),
             "authuser":    m.group(3),
@@ -101,6 +102,17 @@ def _extract_one(raw: str, fmt: str) -> dict[str, str]:
             "status_code": m.group(6),
             "bytes":       m.group(7),
         }
+        # Break request into method + uri_stem
+        req_parts = m.group(5).split(None, 2)
+        if len(req_parts) >= 2:
+            fields["http_method"] = req_parts[0]
+            fields["uri_stem"]    = req_parts[1]
+        # Combined Log Format optional referer + user-agent
+        if m.group(8) is not None:
+            fields["referer"]    = m.group(8)
+        if m.group(9):
+            fields["user_agent"] = m.group(9)
+        return fields
     m = _SYSLOG_TEXT_ERROR_RE.match(body)
     if m:
         result: dict[str, str] = {
@@ -118,14 +130,31 @@ def _extract_one(raw: str, fmt: str) -> dict[str, str]:
     return {f"_token{i}": tok for i, tok in enumerate(tokens[:20])}
 
 
+def _smart_split(s: str) -> list[str]:
+    """Tokenise a log line respecting quoted strings and bracket-enclosed fields.
+
+    Priority order (first match wins at each position):
+      1. "..."  — double-quoted string (e.g. HTTP request, referer, user-agent)
+      2. [...]  — bracket-enclosed field (e.g. Apache timestamp)
+      3. \S+    — plain non-whitespace token
+
+    Examples
+    --------
+    '192.168.1.1 - - [01/Jan/2025:00:00:00 +0000] "GET /index HTTP/1.1" 200 512'
+    → ['192.168.1.1', '-', '-', '[01/Jan/2025:00:00:00 +0000]',
+       '"GET /index HTTP/1.1"', '200', '512']
+    """
+    return re.findall(r'"[^"]*"|\[[^\]]*\]|\S+', s)
+
+
 def build_whitespace_matrix(samples: list[str]) -> list[dict]:
-    """Split each sample by whitespace (multiple spaces / tabs = one separator).
+    """Split each sample into tokens, respecting quoted and bracket-delimited fields.
 
     Returns one row per token position with per-sample values.
     Each row: {token: 'tok_N', values: [str, ...], consistent: bool}
     """
     clean = [s.strip() for s in samples if s.strip()]
-    per_sample = [re.split(r'\s+', s) for s in clean]
+    per_sample = [_smart_split(s) for s in clean]
     max_pos = max((len(toks) for toks in per_sample), default=0)
     rows = []
     for pos in range(max_pos):

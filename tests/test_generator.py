@@ -383,3 +383,58 @@ def test_syslog_text_access_log_regex_captures_req_time():
     """Access log switch/case must capture _req_time (private) for the deviceTime Step 3b override."""
     xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _NCSA_TS_SAMPLES)
     assert "_req_time:gPatMesgBodyMin" in xml
+
+
+# ── Pure `text` format (no syslog header) ─────────────────────────────────────
+
+_PURE_APACHE_SAMPLES = [
+    '192.168.5.142 - - [04/Mar/2026:02:12:45 +0530] "POST /wp-login.php HTTP/1.1" 401 381 "-" "Mozilla/5.0 (Windows NT 10.0)"',
+    '192.168.5.142 - - [04/Mar/2026:02:12:46 +0530] "GET /index.html HTTP/1.1" 200 512 "-" "Mozilla/5.0 (X11; Linux x86_64)"',
+]
+
+_TEXT_FORMAT_META = {
+    "name": "ApacheAccess", "scope": "enabled", "parser_type": "User",
+    "vendor": "Apache", "model": "HTTP", "version": "ANY", "anchor": "",
+}
+
+
+def test_text_format_access_log_recognizer():
+    """fmt='text' with Apache access log samples must generate IP-based recognizer, not JSON stub."""
+    xml = generate_parser(_TEXT_FORMAT_META, {}, "text", _PURE_APACHE_SAMPLES)
+    rec_line = next(l for l in xml.splitlines() if "eventFormatRecognizer" in l)
+    assert "gPatIpAddr" in rec_line
+    assert '"type"' not in rec_line
+
+
+def test_text_format_ncsa_triggers_step3b():
+    """fmt='text' with NCSA timestamp must generate Step 3b deviceTime override."""
+    xml = generate_parser(_TEXT_FORMAT_META, {}, "text", _PURE_APACHE_SAMPLES)
+    assert "Step 3b" in xml
+    assert "dd/MMM/yyyy:HH:mm:ss Z" in xml
+    assert "exist _req_time" in xml
+
+
+def test_ncsa_regex_captures_useragent():
+    """NCSA access_log case must include optional combined-log userAgent capture."""
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _NCSA_TS_SAMPLES)
+    assert "userAgent:gPatMesgBodyMin" in xml
+
+
+def test_ncsa_regex_useragent_in_text_format():
+    """fmt='text' NCSA case must also include userAgent capture."""
+    xml = generate_parser(_TEXT_FORMAT_META, {}, "text", _PURE_APACHE_SAMPLES)
+    assert "userAgent:gPatMesgBodyMin" in xml
+
+
+def test_access_log_user_assignment_from_authuser():
+    """syslog+text access log must emit <when exist _user> to assign user EAT."""
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _NCSA_TS_SAMPLES)
+    assert 'exist _user' in xml
+    assert 'attr="user"' in xml
+
+
+def test_text_format_user_assignment_from_authuser():
+    """fmt='text' access log must also emit user assignment from _user."""
+    xml = generate_parser(_TEXT_FORMAT_META, {}, "text", _PURE_APACHE_SAMPLES)
+    assert 'exist _user' in xml
+    assert 'attr="user"' in xml

@@ -1064,14 +1064,14 @@ function studioApp() {
         destIpAddr:     { hints: ['dst_ip','destip','dstip','dest_ip','target_ip','remote_ip','server_ip'],             re: /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/ },
         srcHostName:    { hints: ['hostname','host','srchost','client_host','source_host','servername'],                re: null },
         httpStatusCode: { hints: ['status_code','status','statuscode','http_status','response_code','resp_status'],     re: /^[1-5]\d{2}$/ },
-        httpMethod:     { hints: ['method','http_method','verb','request_method'],                                      re: /^"?(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|CONNECT|TRACE)"?$/i },
-        uriStem:        { hints: ['uri','path','url','uri_stem','request_uri','endpoint','resource'],                   re: /^"?\// },
+        httpMethod:     { hints: ['http_method','method','verb','request_method'],                                       re: /^"?(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|CONNECT|TRACE)"?$/i },
+        uriStem:        { hints: ['uri_stem','uri','path','url','request_uri','endpoint','resource'],                   re: /^"?\// },
         recvBytes64:    { hints: ['bytes','size','bytes_sent','content_length','resp_bytes','body_bytes'],              re: /^\d+$/ },
         deviceTime:     { hints: ['req_time','timestamp','time','datetime','log_time','@timestamp','event_time','ts'],  re: /\d{1,2}[\/\-]\w+[\/\-]\d{4}|\d{4}-\d{2}-\d{2}/ },
         user:           { hints: ['authuser','user','username','userid','account','login'],                             re: null },
         userAgent:      { hints: ['user_agent','useragent','agent','ua','http_user_agent'],                            re: /^"?Mozilla|^"?curl|^"?python|^"?Go-http/i },
-        srcIpPort:      { hints: ['sport','src_port','srcport','client_port','source_port','lport'],                   re: /^\d{1,5}$/ },
-        destIpPort:     { hints: ['dport','dst_port','dstport','dest_port','target_port','rport'],                     re: /^\d{1,5}$/ },
+        srcIpPort:      { hints: ['sport','src_port','srcport','client_port','source_port','lport'],                   re: /^\d{1,5}$/, requireNameMatch: true },
+        destIpPort:     { hints: ['dport','dst_port','dstport','dest_port','target_port','rport'],                     re: /^\d{1,5}$/, requireNameMatch: true },
         ipProto:        { hints: ['proto','protocol','transport','ip_proto','network_proto'],                          re: /^(?:tcp|udp|icmp|\d+)$/i },
         eventAction:    { hints: ['action','verdict','result','decision','disposition'],                               re: /^(?:allow|deny|block|permit|drop|reject|forward|pass|close)$/i },
         policyName:     { hints: ['policy','rule','rule_name','policy_name','acl_name','filter_name'],                 re: null },
@@ -1102,9 +1102,14 @@ function studioApp() {
         let score = 0;
 
         // Name matching: exact hint > partial hint > EAT substring similarity
-        if (m.hints.includes(tLower))                                         score += 60;
-        else if (m.hints.some(h => tLower.includes(h) || h.includes(tLower))) score += 30;
-        else if (tLower.includes(eatLower) || eatLower.includes(tLower))      score += 20;
+        let nameScore = 0;
+        if (m.hints.includes(tLower))                                          nameScore = 60;
+        else if (m.hints.some(h => tLower.includes(h) || h.includes(tLower))) nameScore = 30;
+        else if (tLower.includes(eatLower) || eatLower.includes(tLower))       nameScore = 20;
+        score += nameScore;
+
+        // If the matcher requires a name match, skip tokens with no name hint match
+        if (m.requireNameMatch && nameScore === 0) continue;
 
         // Value pattern matching: all match > majority match > some match
         if (m.re) {
@@ -1130,12 +1135,18 @@ function studioApp() {
       const sources = [...this.tokenMatrix, ...this.wsMatrix];
       if (!sources.length) return;
 
+      // Track which tokens have already been assigned to prevent the same token
+      // being mapped to multiple EATs (e.g. client_ip → both srcIpAddr + destIpAddr)
+      const usedTokens = new Set();
+
       this.stagingFields = this.stagingFields.map(sf => {
         if (!sf.eat) return sf;
         if (sf.tokens.some(t => t)) return sf;  // already assigned via drag-drop — keep it
 
-        const match = this._bestTokenForEat(sf.eat, sources);
+        const available = sources.filter(s => !usedTokens.has(s.token));
+        const match = this._bestTokenForEat(sf.eat, available);
         if (!match) return sf;
+        usedTokens.add(match.token);
 
         const vals = [...match.values];
         while (vals.length < this.sampleCount) vals.push('');
@@ -1196,7 +1207,12 @@ function studioApp() {
         const vals = row.values.filter(v => v);
         if (!vals.length) continue;
         if (vals.every(v => ipRe.test(v)))                         add('srcIpAddr', 'destIpAddr');
-        if (vals.every(v => portRe.test(v) && +v<=65535 && +v>0)) add('srcIpPort', 'destIpPort');
+        if (vals.every(v => portRe.test(v) && +v<=65535 && +v>0)) {
+          // Exclude byte/size tokens that happen to have small integer values
+          const rowName = (row.token || '').toLowerCase();
+          if (!['byte','size','length','content'].some(h => rowName.includes(h)))
+            add('srcIpPort', 'destIpPort');
+        }
         if (vals.every(v => methRe.test(v)))                       add('httpMethod');
         if (vals.every(v => statRe.test(v)))                       add('httpStatusCode');
         if (vals.every(v => urlRe.test(v)))                        add('uriStem');

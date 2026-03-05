@@ -184,10 +184,10 @@ def _generate_switch_extraction(structures: list[str]) -> str:
         if struct == 'access_log':
             lines += [
                 '      <case>',
-                '        <!-- NCSA Combined Log Format: [code] client ident user [ts] "method path proto" status bytes -->',
-                '        <!-- _req_time captures the TZ-aware timestamp for Step 3b deviceTime override -->',
+                '        <!-- NCSA Combined Log Format: [code] client ident user [ts] "method path proto" status bytes ["ref" "ua"] -->',
+                '        <!-- _req_time and _user are private; assigned to deviceTime/user after the switch -->',
                 '        <collectFieldsByRegex src="$_body">',
-                '          <regex><![CDATA[(?:\\d+\\s+)?<srcIpAddr:gPatIpAddr>\\s+<:gPatStr>\\s+<_user:gPatStr>\\s+\\[<_req_time:gPatMesgBodyMin>\\]\\s+"<httpMethod:gPatStr>\\s+<uriStem:gPatStr>\\s+<:gPatStr>"\\s+<httpStatusCode:gPatInt>\\s+<recvBytes64:gPatStr>]]></regex>',
+                '          <regex><![CDATA[(?:\\d+\\s+)?<srcIpAddr:gPatIpAddr>\\s+<:gPatStr>\\s+<_user:gPatStr>\\s+\\[<_req_time:gPatMesgBodyMin>\\]\\s+"<httpMethod:gPatStr>\\s+<uriStem:gPatStr>\\s+<:gPatStr>"\\s+<httpStatusCode:gPatInt>\\s+<recvBytes64:gPatStr>(?:\\s+"<:gPatMesgBodyMin>"\\s+"<userAgent:gPatMesgBodyMin>")?]]></regex>',
                 '        </collectFieldsByRegex>',
                 '      </case>',
             ]
@@ -303,7 +303,7 @@ def generate_parser(meta: dict, mappings: dict[str, str],
 
     # Detect body timestamp field for Step 3b (JSON/KV/text formats)
     body_ts = None
-    if fmt in ('syslog+json', 'json', 'syslog+kv', 'syslog+bracket-kv', 'syslog+text') and samples:
+    if fmt in ('syslog+json', 'json', 'syslog+kv', 'syslog+bracket-kv', 'syslog+text', 'text') and samples:
         try:
             sampled_fields = extract_fields(samples, fmt)
             body_ts = _detect_body_timestamp(sampled_fields)
@@ -326,6 +326,15 @@ def generate_parser(meta: dict, mappings: dict[str, str],
             f"{pri_prefix}<:gPatMon>\\s+<:gPatDay>\\s+<:gPatTime>"
             f"{year_tok}{tz_tok}\\s+<:gPatStr>{ip_tok}\\s+{anchor}"
         )
+    elif fmt == "text":
+        body_structs = [_classify_body_structure(s.strip()) for s in samples if s.strip()]
+        dominant = Counter(body_structs).most_common(1)[0][0] if body_structs else 'generic'
+        if dominant == 'access_log':
+            recognizer = '<:gPatIpAddr>\\s+-'
+        elif dominant == 'error_log':
+            recognizer = '^\\['
+        else:
+            recognizer = anchor
     else:
         recognizer = f'"type"\\s*:\\s*"'  # generic JSON anchor stub
 
@@ -377,7 +386,7 @@ def generate_parser(meta: dict, mappings: dict[str, str],
         desc      = body_ts['description']
         step3b_lines.append('')
         step3b_lines.append(f'  <!-- Step 3b: Override deviceTime from body timestamp ({desc}) -->')
-        if fmt == 'syslog+text' and field_var == 'req_time':
+        if fmt in ('syslog+text', 'text') and field_var == 'req_time':
             # _req_time is captured as a private var by the access_log switch/case.
             # The <when> guard ensures this only fires for access-log lines (not error-log lines).
             step3b_lines.append('  <when test="exist _req_time">')
@@ -396,11 +405,25 @@ def generate_parser(meta: dict, mappings: dict[str, str],
             step3b_lines.append(
                 f'  <setEventAttribute attr="deviceTime">toDateTime(${field_var}, "{fmt_str}")</setEventAttribute>')
 
+    # For text/syslog+text access logs: assign _user → user after the switch/case
+    user_lines: list[str] = []
+    if fmt in ('syslog+text', 'text'):
+        user_lines = [
+            '',
+            "  <!-- Assign NCSA authuser to user EAT (skip '-' placeholder) -->",
+            '  <when test="exist _user">',
+            "    <when test=\"$_user != '-'\">",
+            '      <setEventAttribute attr="user">$_user</setEventAttribute>',
+            '    </when>',
+            '  </when>',
+        ]
+
     xml_lines += [
         '',
         f'  <!-- Step 3: Extract fields ({_safe_comment(fmt)}) -->',
         extraction,
         *step3b_lines,
+        *user_lines,
         '',
         '  <!-- Step 4: Set eventType -->',
         f'  <setEventAttribute attr="eventType">{name}-Event</setEventAttribute>',

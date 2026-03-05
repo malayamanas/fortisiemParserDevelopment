@@ -80,7 +80,27 @@ def test_syslog_text_access_log_extracts_named_fields():
     assert "client_ip" in fields
     assert "request" in fields
     assert "status_code" in fields
+    assert "http_method" in fields
+    assert fields["http_method"]["values"][0] == "GET"
+    assert "uri_stem" in fields
+    assert fields["uri_stem"]["values"][0] == "/icons/apache_pb2.gif"
     assert "_token0" not in fields   # no positional tokens
+
+
+def test_syslog_text_combined_log_extracts_referer_and_ua():
+    """Apache Combined Log Format: referer and user_agent captured."""
+    sample = (
+        '192.168.1.1 - - [04/Mar/2026:12:00:00 +0530] '
+        '"POST /wp-login.php HTTP/1.1" 401 381 '
+        '"-" "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36"'
+    )
+    fields = extract_fields([sample], "syslog+text")
+    assert "user_agent" in fields
+    assert fields["user_agent"]["values"][0] == "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36"
+    assert "referer" in fields
+    assert fields["referer"]["values"][0] == "-"
+    assert fields["http_method"]["values"][0] == "POST"
+    assert fields["uri_stem"]["values"][0] == "/wp-login.php"
 
 
 def test_syslog_text_error_log_extracts_named_fields():
@@ -146,6 +166,29 @@ def test_whitespace_matrix_unequal_lengths():
     rows = build_whitespace_matrix([s1, s2])
     tok4 = next(r for r in rows if r['token'] == 'tok_4')
     assert tok4['values'] == ['', 'extra_token']
+
+
+def test_whitespace_matrix_quoted_strings_as_single_token():
+    """Quoted fields must not be split by the spaces inside them."""
+    s1 = '192.168.1.1 - - [01/Jan/2025:00:00:00 +0000] "GET /index.html HTTP/1.1" 200 512 "-" "Mozilla/5.0 (Windows NT 10.0)"'
+    rows = build_whitespace_matrix([s1])
+    values = [r['values'][0] for r in rows]
+    # tok_3 = bracket timestamp, tok_4 = full quoted request, tok_7 = referer, tok_8 = user-agent
+    assert values[3] == '[01/Jan/2025:00:00:00 +0000]'
+    assert values[4] == '"GET /index.html HTTP/1.1"'
+    assert values[7] == '"-"'
+    assert values[8] == '"Mozilla/5.0 (Windows NT 10.0)"'
+    assert len(rows) == 9   # exactly 9 tokens, not split further
+
+
+def test_whitespace_matrix_bracket_timestamp_as_single_token():
+    """[timestamp with timezone] must be one token."""
+    s = '10.0.0.1 - user [04/Mar/2026:12:00:00 +0530] "POST /login HTTP/1.1" 401 381'
+    rows = build_whitespace_matrix([s])
+    values = [r['values'][0] for r in rows]
+    assert values[3] == '[04/Mar/2026:12:00:00 +0530]'
+    assert values[4] == '"POST /login HTTP/1.1"'
+    assert len(rows) == 7
 
 
 def test_token_matrix_absent_token_is_empty_string():
