@@ -127,7 +127,7 @@
       <button @click="buildStagingFromUsecase()" class="btn btn-sm btn-secondary" style="margin-left:.5rem">&#8635; Rebuild from Use Case</button>
       <button @click="addStagingRow()" class="btn btn-sm" style="margin-left:.5rem">+ Add Row</button>
     </h2>
-    <p class="hint">Drag token cells from the Token Matrix above into the sample columns to assign log positions to EAT fields. Click <strong>Generate Field Mapping</strong> to push assignments to the Field Mappings section below.</p>
+    <p class="hint">Sample values are auto-matched to EAT fields from the Token Matrix. Review the assignments, drag cells to correct any mistakes, then click <strong>Generate Field Mapping</strong>.</p>
     <div style="overflow-x:auto">
       <table class="mapping-table" style="white-space:nowrap">
         <thead>
@@ -1052,6 +1052,100 @@ function studioApp() {
         values: Array(this.sampleCount).fill(''),
         tokens: Array(this.sampleCount).fill(''),
       }));
+      this.autoPopulateStagingFromMatrix();
+    },
+
+    // ── Auto-correlate Token Matrix values → Staging Table rows ──────────────
+
+    _bestTokenForEat(eat, tokens) {
+      // EAT name → {name hints to match against token names, value regex to test sample values}
+      const matchers = {
+        srcIpAddr:      { hints: ['client_ip','src_ip','srcip','sourceip','clientip','source_ip','remote_host'],        re: /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/ },
+        destIpAddr:     { hints: ['dst_ip','destip','dstip','dest_ip','target_ip','remote_ip','server_ip'],             re: /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/ },
+        srcHostName:    { hints: ['hostname','host','srchost','client_host','source_host','servername'],                re: null },
+        httpStatusCode: { hints: ['status_code','status','statuscode','http_status','response_code','resp_status'],     re: /^[1-5]\d{2}$/ },
+        httpMethod:     { hints: ['method','http_method','verb','request_method'],                                      re: /^"?(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|CONNECT|TRACE)"?$/i },
+        uriStem:        { hints: ['uri','path','url','uri_stem','request_uri','endpoint','resource'],                   re: /^"?\// },
+        recvBytes64:    { hints: ['bytes','size','bytes_sent','content_length','resp_bytes','body_bytes'],              re: /^\d+$/ },
+        deviceTime:     { hints: ['req_time','timestamp','time','datetime','log_time','@timestamp','event_time','ts'],  re: /\d{1,2}[\/\-]\w+[\/\-]\d{4}|\d{4}-\d{2}-\d{2}/ },
+        user:           { hints: ['authuser','user','username','userid','account','login'],                             re: null },
+        userAgent:      { hints: ['user_agent','useragent','agent','ua','http_user_agent'],                            re: /^"?Mozilla|^"?curl|^"?python|^"?Go-http/i },
+        srcIpPort:      { hints: ['sport','src_port','srcport','client_port','source_port','lport'],                   re: /^\d{1,5}$/ },
+        destIpPort:     { hints: ['dport','dst_port','dstport','dest_port','target_port','rport'],                     re: /^\d{1,5}$/ },
+        ipProto:        { hints: ['proto','protocol','transport','ip_proto','network_proto'],                          re: /^(?:tcp|udp|icmp|\d+)$/i },
+        eventAction:    { hints: ['action','verdict','result','decision','disposition'],                               re: /^(?:allow|deny|block|permit|drop|reject|forward|pass|close)$/i },
+        policyName:     { hints: ['policy','rule','rule_name','policy_name','acl_name','filter_name'],                 re: null },
+        domainName:     { hints: ['domain','domain_name','fqdn','dns_name'],                                          re: null },
+        msg:            { hints: ['message','msg','description','text','log_message','mesg','log_msg'],                re: null },
+        procName:       { hints: ['process','proc','program','app','service','procname','process_name','command'],     re: null },
+        procId:         { hints: ['pid','procid','process_id','proc_id'],                                             re: /^\d+$/ },
+        fileName:       { hints: ['filename','file','fname','file_name'],                                             re: null },
+        filePath:       { hints: ['filepath','fullpath','file_path','path'],                                          re: null },
+        hashMD5:        { hints: ['md5','hash_md5','checksum','file_hash'],                                           re: /^[0-9a-f]{32}$/i },
+        virusName:      { hints: ['virus','malware','threat_name','virusname','malware_name'],                        re: null },
+        winEventId:     { hints: ['eventid','event_id','wineventid','evtid'],                                         re: /^\d{3,5}$/ },
+        sessionId:      { hints: ['session','sessionid','session_id','conn_id'],                                      re: null },
+        eventSeverity:  { hints: ['severity','level','priority','sev','loglevel','log_level'],                        re: /^[1-9]$|^10$/ },
+        command:        { hints: ['command','cmd','commandline','command_line'],                                       re: null },
+        threatLevel:    { hints: ['threat_level','threatlevel','risk','risk_level'],                                   re: null },
+      };
+
+      const m = matchers[eat] || { hints: [eat.toLowerCase()], re: null };
+      const eatLower = eat.toLowerCase();
+
+      let best = null, bestScore = 0;
+      for (const tok of tokens) {
+        const tLower = tok.token.toLowerCase();
+        const nonEmpty = tok.values.filter(v => v);
+        if (!nonEmpty.length) continue;
+
+        let score = 0;
+
+        // Name matching: exact hint > partial hint > EAT substring similarity
+        if (m.hints.includes(tLower))                                         score += 60;
+        else if (m.hints.some(h => tLower.includes(h) || h.includes(tLower))) score += 30;
+        else if (tLower.includes(eatLower) || eatLower.includes(tLower))      score += 20;
+
+        // Value pattern matching: all match > majority match > some match
+        if (m.re) {
+          const matchCount = nonEmpty.filter(v => m.re.test(v)).length;
+          const ratio = matchCount / nonEmpty.length;
+          if (ratio >= 1.0)  score += 40;
+          else if (ratio >= 0.5) score += 20;
+          else if (ratio > 0)    score += 5;
+        }
+
+        // Prefer named tokenMatrix tokens over positional wsMatrix (tok_N)
+        if (!tok.token.startsWith('tok_')) score += 15;
+
+        if (score > bestScore) { bestScore = score; best = tok; }
+      }
+
+      return bestScore >= 25 ? best : null;  // minimum confidence threshold
+    },
+
+    autoPopulateStagingFromMatrix() {
+      if (!this.stagingFields.length) return;
+      // Prefer tokenMatrix (named, format-specific) over wsMatrix (positional)
+      const sources = [...this.tokenMatrix, ...this.wsMatrix];
+      if (!sources.length) return;
+
+      this.stagingFields = this.stagingFields.map(sf => {
+        if (!sf.eat) return sf;
+        if (sf.tokens.some(t => t)) return sf;  // already assigned via drag-drop — keep it
+
+        const match = this._bestTokenForEat(sf.eat, sources);
+        if (!match) return sf;
+
+        const vals = [...match.values];
+        while (vals.length < this.sampleCount) vals.push('');
+
+        return {
+          ...sf,
+          values: vals.slice(0, this.sampleCount),
+          tokens: Array(this.sampleCount).fill(match.token),
+        };
+      });
     },
 
     guessEatsFromUsecase(desc, matrix) {
