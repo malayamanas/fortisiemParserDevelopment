@@ -135,6 +135,7 @@
       <table class="mapping-table" style="white-space:nowrap">
         <thead>
           <tr>
+            <th style="width:28px"></th>
             <th style="min-width:190px">Field in Log (EAT)</th>
             <template x-for="(_, si) in Array.from({length: sampleCount})" :key="si">
               <th x-text="'Sample ' + (si + 1)"></th>
@@ -144,7 +145,16 @@
         </thead>
         <tbody>
           <template x-for="(sf, sfi) in stagingFields" :key="sfi">
-            <tr>
+            <tr :class="{ 'staging-dragging': sfi === dragStagingIdx, 'staging-drag-over': sfi === dragOverStagingIdx }"
+                @dragover.prevent="dragOverStagingIdx = sfi"
+                @dragleave="dragOverStagingIdx = null"
+                @drop.prevent="dropStagingRow(sfi)"
+                @dragend="dragStagingIdx = null; isDraggingStagingRow = false; dragOverStagingIdx = null">
+              <!-- Drag handle: grabbing this cell initiates row reorder -->
+              <td class="staging-handle"
+                  draggable="true"
+                  @dragstart.stop="startDragStagingRow($event, sfi)"
+                  title="Drag to reorder">&#8942;&#8942;</td>
               <td>
                 <input type="text" list="eat-names-list"
                        x-model="stagingFields[sfi].eat"
@@ -153,7 +163,7 @@
               </td>
               <template x-for="(_, si) in Array.from({length: sampleCount})" :key="si">
                 <td class="staging-cell"
-                    @dragover.prevent="$el.classList.add('drop-target')"
+                    @dragover.prevent="if (!isDraggingStagingRow) $el.classList.add('drop-target')"
                     @dragleave="$el.classList.remove('drop-target')"
                     @drop.prevent="dropOnStagingCell(sfi, si, $el)">
                   <template x-if="sf.values[si]">
@@ -763,6 +773,11 @@ function studioApp() {
     dragToken: null,          // row-level drag from Token Matrix → Field Mappings EAT cell
     dragCell: null,           // cell-level drag from Token Matrix → Staging Table cell
 
+    // Staging Table row-reorder drag state
+    dragStagingIdx: null,        // source row index being reordered
+    isDraggingStagingRow: false, // true while a staging row drag is in progress
+    dragOverStagingIdx: null,    // row index currently being dragged over (drop indicator)
+
     // Field Mapping Staging Table
     stagingFields: [],        // [{eat:'', values:[], tokens:[]}]
 
@@ -985,6 +1000,7 @@ function studioApp() {
 
     dropOnStagingCell(sfi, sampleIdx, cell) {
       cell.classList.remove('drop-target');
+      if (this.isDraggingStagingRow) return;   // ignore during row reorder
       if (!this.dragCell) return;
       const sf = this.stagingFields[sfi];
       // Replace arrays to ensure Alpine reactivity
@@ -994,6 +1010,31 @@ function studioApp() {
       this.dragCell = null;
       cell.classList.add('drop-ok');
       setTimeout(() => cell.classList.remove('drop-ok'), 800);
+    },
+
+    // ── Staging Table row reorder ─────────────────────────────────────────────
+
+    startDragStagingRow(e, sfi) {
+      this.dragStagingIdx = sfi;
+      this.isDraggingStagingRow = true;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(sfi));
+    },
+
+    dropStagingRow(targetSfi) {
+      if (this.dragStagingIdx === null || this.dragStagingIdx === targetSfi) {
+        this.dragStagingIdx = null;
+        this.isDraggingStagingRow = false;
+        this.dragOverStagingIdx = null;
+        return;
+      }
+      const rows = [...this.stagingFields];
+      const [moved] = rows.splice(this.dragStagingIdx, 1);
+      rows.splice(targetSfi, 0, moved);
+      this.stagingFields = rows;
+      this.dragStagingIdx = null;
+      this.isDraggingStagingRow = false;
+      this.dragOverStagingIdx = null;
     },
 
     // ── Staging Table ─────────────────────────────────────────────────────────
