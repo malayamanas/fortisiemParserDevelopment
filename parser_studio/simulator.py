@@ -136,8 +136,14 @@ def _apply_function(func_str: str, attrs: dict) -> str:
 
     m = re.match(r'toDateTime\((.+)\)', s)
     if m:
-        args  = [a.strip().strip('"\'') for a in m.group(1).split(',')]
-        parts = [attrs.get(a.lstrip('$'), a) for a in args[:4]]
+        raw_args = m.group(1).split(',')
+        # 2-arg form: toDateTime($var, "java_format_string") — return resolved variable only
+        if len(raw_args) == 2 and raw_args[1].strip()[:1] in ('"', "'"):
+            var = raw_args[0].strip().lstrip('$')
+            return attrs.get(var, raw_args[0].strip())
+        # Multi-arg form: toDateTime(mon, day[, year], time[, tz])
+        args  = [a.strip().strip('"\'') for a in raw_args[:5]]
+        parts = [attrs.get(a.lstrip('$'), a) for a in args]
         return " ".join(p for p in parts if p)
 
     m = re.match(r'combineMsgId\((.+)\)', s, re.DOTALL)
@@ -181,10 +187,17 @@ def _eval_test(test: str, attrs: dict) -> bool:
 
 
 def _simulate_one(instructions_elem: ET.Element, raw: str,
-                  custom: dict[str, str] | None = None) -> dict:
-    """Walk parsingInstructions XML and simulate each step. Returns attrs dict."""
+                  custom: dict[str, str] | None = None,
+                  _ctx: dict | None = None) -> dict:
+    """Walk parsingInstructions XML and simulate each step. Returns attrs dict.
+
+    _ctx: parent attrs to inherit (used for when/choose/switch recursion so that
+    variables captured earlier in the same instruction block remain visible).
+    """
     cp = custom or {}
-    attrs: dict[str, str] = {"_rawmsg": raw}
+    attrs: dict[str, str] = _ctx.copy() if _ctx is not None else {"_rawmsg": raw}
+    if "_rawmsg" not in attrs:
+        attrs["_rawmsg"] = raw
 
     for elem in instructions_elem:
         tag = elem.tag
@@ -236,7 +249,7 @@ def _simulate_one(instructions_elem: ET.Element, raw: str,
             if _eval_test(elem.attrib.get("test", ""), attrs):
                 wrapper = ET.Element("p")
                 wrapper.extend(list(elem))
-                attrs.update(_simulate_one(wrapper, raw, cp))
+                attrs.update(_simulate_one(wrapper, raw, cp, attrs))
 
         elif tag == "choose":
             matched = False
@@ -246,11 +259,11 @@ def _simulate_one(instructions_elem: ET.Element, raw: str,
                         matched = True
                         wrapper = ET.Element("p")
                         wrapper.extend(list(child))
-                        attrs.update(_simulate_one(wrapper, raw, cp))
+                        attrs.update(_simulate_one(wrapper, raw, cp, attrs))
                 elif child.tag == "otherwise" and not matched:
                     wrapper = ET.Element("p")
                     wrapper.extend(list(child))
-                    attrs.update(_simulate_one(wrapper, raw, cp))
+                    attrs.update(_simulate_one(wrapper, raw, cp, attrs))
 
         elif tag == "switch":
             # Try each case in order; commit the first whose regex matches.
@@ -279,7 +292,7 @@ def _simulate_one(instructions_elem: ET.Element, raw: str,
                             if sibling is not cfr:
                                 wrapper = ET.Element("p")
                                 wrapper.append(sibling)
-                                attrs.update(_simulate_one(wrapper, raw, cp))
+                                attrs.update(_simulate_one(wrapper, raw, cp, attrs))
                         break  # first match wins
                 except re.error:
                     pass

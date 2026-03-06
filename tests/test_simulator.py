@@ -98,3 +98,71 @@ def test_library_unmatched_shows_skip(tmp_db):
     assert parser_row["matched"] is False
     assert parser_row["status"] == "skip"
     assert parser_row["fields"] == {}
+
+
+# === context propagation (when/choose inherit parent attrs) ===
+
+_APACHE_SAMPLE = (
+    '192.168.5.142 - admin [04/Mar/2026:02:12:45 +0530] '
+    '"POST /wp-login.php HTTP/1.1" 401 381 "-" '
+    '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"'
+)
+_APACHE_DASH_USER = (
+    '192.168.5.142 - - [04/Mar/2026:02:12:45 +0530] '
+    '"GET /index.html HTTP/1.1" 200 512 "-" '
+    '"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"'
+)
+_APACHE_META = {
+    "name": "ApacheAccess", "scope": "enabled", "parser_type": "User",
+    "vendor": "Apache", "model": "HTTP", "version": "ANY", "anchor": "",
+}
+_APACHE_MAPPINGS = {
+    "srcIpAddr": "srcIpAddr",
+    "httpMethod": "httpMethod",
+    "uriStem": "uriStem",
+    "httpStatusCode": "httpStatusCode",
+    "recvBytes64": "recvBytes64",
+    "userAgent": "userAgent",
+}
+
+
+def test_when_inherits_switch_captures():
+    """deviceTime must be set from _req_time captured by the switch case."""
+    xml_str = generate_parser(_APACHE_META, _APACHE_MAPPINGS, "text", [_APACHE_SAMPLE])
+    r = simulate(xml_str, [_APACHE_SAMPLE])[0]
+    dt = r["fields"].get("deviceTime", "")
+    # Should resolve to the actual timestamp string, not the literal '$_req_time'
+    assert "$_req_time" not in dt, f"deviceTime still unresolved: {dt!r}"
+    assert "04/Mar/2026" in dt or "02:12:45" in dt, f"deviceTime value unexpected: {dt!r}"
+
+
+def test_when_skips_dash_authuser():
+    """user EAT must not be set when authuser is '-' placeholder."""
+    xml_str = generate_parser(_APACHE_META, _APACHE_MAPPINGS, "text", [_APACHE_DASH_USER])
+    r = simulate(xml_str, [_APACHE_DASH_USER])[0]
+    # user should be absent (authuser '-' is a placeholder, not a real user)
+    assert "user" not in r["fields"], f"user unexpectedly set: {r['fields'].get('user')!r}"
+
+
+def test_when_sets_real_authuser():
+    """user EAT must be set when authuser is a real username (not '-')."""
+    xml_str = generate_parser(_APACHE_META, _APACHE_MAPPINGS, "text", [_APACHE_SAMPLE])
+    r = simulate(xml_str, [_APACHE_SAMPLE])[0]
+    assert r["fields"].get("user") == "admin"
+
+
+def test_todatetime_two_arg_form_resolves_variable():
+    """toDateTime($var, "format") must return the resolved variable value, not 'format'."""
+    from parser_studio.simulator import _apply_function
+    attrs = {"_req_time": "04/Mar/2026:02:12:45 +0530"}
+    result = _apply_function('toDateTime($_req_time, "dd/MMM/yyyy:HH:mm:ss Z")', attrs)
+    assert result == "04/Mar/2026:02:12:45 +0530"
+    assert "dd/MMM" not in result
+
+
+def test_todatetime_multiarg_form_joins_components():
+    """toDateTime(mon, day, year, time) must join the resolved components."""
+    from parser_studio.simulator import _apply_function
+    attrs = {"_mon": "Mar", "_day": "4", "_year": "2026", "_time": "02:12:45"}
+    result = _apply_function("toDateTime($_mon, $_day, $_year, $_time)", attrs)
+    assert "Mar" in result and "2026" in result and "02:12:45" in result
