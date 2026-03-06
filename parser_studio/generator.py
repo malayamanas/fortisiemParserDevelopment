@@ -164,6 +164,57 @@ def _classify_body_structure(body: str) -> str:
     return 'generic'
 
 
+def _dominant_body_structure(samples: list[str], fmt: str) -> str:
+    """Return the most common body structure across samples: 'access_log', 'error_log', or 'generic'."""
+    structs = []
+    for s in samples:
+        if not s.strip():
+            continue
+        if fmt.startswith('syslog'):
+            _, body = strip_syslog_header(s)
+            body = (body or '').strip()
+        else:
+            body = s.strip()
+        if body:
+            structs.append(_classify_body_structure(body))
+    return Counter(structs).most_common(1)[0][0] if structs else 'generic'
+
+
+def _generate_http_status_choose(name: str) -> list[str]:
+    """Return XML lines for a <when>/<choose> block that maps HTTP status codes to eventTypes."""
+    return [
+        '  <!-- HTTP status → eventType / eventSeverity override -->',
+        '  <when test="exist httpStatusCode">',
+        '    <choose>',
+        '      <when test="matches($httpStatusCode, \'^2\')">',
+        f'        <setEventAttribute attr="eventType">{name}-Web-Request-Success</setEventAttribute>',
+        '        <setEventAttribute attr="eventSeverity">1</setEventAttribute>',
+        '      </when>',
+        '      <when test="matches($httpStatusCode, \'^3\')">',
+        f'        <setEventAttribute attr="eventType">{name}-Web-Request-Redirect</setEventAttribute>',
+        '        <setEventAttribute attr="eventSeverity">2</setEventAttribute>',
+        '      </when>',
+        '      <when test="matches($httpStatusCode, \'^401\')">',
+        f'        <setEventAttribute attr="eventType">{name}-Web-Access-Denied</setEventAttribute>',
+        '        <setEventAttribute attr="eventSeverity">5</setEventAttribute>',
+        '      </when>',
+        '      <when test="matches($httpStatusCode, \'^403\')">',
+        f'        <setEventAttribute attr="eventType">{name}-Web-Forbidden</setEventAttribute>',
+        '        <setEventAttribute attr="eventSeverity">5</setEventAttribute>',
+        '      </when>',
+        '      <when test="matches($httpStatusCode, \'^4\')">',
+        f'        <setEventAttribute attr="eventType">{name}-Web-Client-Error</setEventAttribute>',
+        '        <setEventAttribute attr="eventSeverity">4</setEventAttribute>',
+        '      </when>',
+        '      <when test="matches($httpStatusCode, \'^5\')">',
+        f'        <setEventAttribute attr="eventType">{name}-Web-Server-Error</setEventAttribute>',
+        '        <setEventAttribute attr="eventSeverity">7</setEventAttribute>',
+        '      </when>',
+        '    </choose>',
+        '  </when>',
+    ]
+
+
 def _generate_switch_extraction(structures: list[str]) -> str:
     """Return switch/case XML for syslog+text based on detected body structures.
 
@@ -320,6 +371,12 @@ def generate_parser(meta: dict, mappings: dict[str, str],
     tz_tok       = "\\s+<:gPatTimeZone>"    if has_tz   else ""
     tz_capture   = "\\s+<_tz:gPatTimeZone>" if has_tz   else ""
 
+    # Dominant body structure — used for recognizer (text) and eventType generation
+    dominant_struct = 'generic'
+    if fmt in ('syslog+text', 'text') and samples:
+        dominant_struct = _dominant_body_structure(samples, fmt)
+    is_access_log = dominant_struct == 'access_log'
+
     # eventFormatRecognizer pattern
     if fmt.startswith("syslog"):
         recognizer = (
@@ -327,11 +384,9 @@ def generate_parser(meta: dict, mappings: dict[str, str],
             f"{year_tok}{tz_tok}\\s+<:gPatStr>{ip_tok}\\s+{anchor}"
         )
     elif fmt == "text":
-        body_structs = [_classify_body_structure(s.strip()) for s in samples if s.strip()]
-        dominant = Counter(body_structs).most_common(1)[0][0] if body_structs else 'generic'
-        if dominant == 'access_log':
+        if dominant_struct == 'access_log':
             recognizer = '<:gPatIpAddr>\\s+-'
-        elif dominant == 'error_log':
+        elif dominant_struct == 'error_log':
             recognizer = '^\\['
         else:
             recognizer = anchor
@@ -418,18 +473,34 @@ def generate_parser(meta: dict, mappings: dict[str, str],
             '  </when>',
         ]
 
+    # Steps 4+5: eventType / eventSeverity — conditional on body structure
+    if is_access_log:
+        event_lines = [
+            '',
+            f'  <!-- Step 4: Default eventType (overridden by HTTP status below) -->',
+            f'  <setEventAttribute attr="eventType">{name}-Web-Generic</setEventAttribute>',
+            f'  <setEventAttribute attr="eventSeverity">5</setEventAttribute>',
+            '',
+            f'  <!-- Step 5: Refine eventType/eventSeverity from HTTP status code -->',
+            *_generate_http_status_choose(name),
+        ]
+    else:
+        event_lines = [
+            '',
+            '  <!-- Step 4: Set eventType -->',
+            f'  <setEventAttribute attr="eventType">{name}-Event</setEventAttribute>',
+            '',
+            '  <!-- Step 5: Set eventSeverity (default 5; add choose block to refine) -->',
+            '  <setEventAttribute attr="eventSeverity">5</setEventAttribute>',
+        ]
+
     xml_lines += [
         '',
         f'  <!-- Step 3: Extract fields ({_safe_comment(fmt)}) -->',
         extraction,
         *step3b_lines,
         *user_lines,
-        '',
-        '  <!-- Step 4: Set eventType -->',
-        f'  <setEventAttribute attr="eventType">{name}-Event</setEventAttribute>',
-        '',
-        '  <!-- Step 5: Set eventSeverity (default 5; add choose block to refine) -->',
-        '  <setEventAttribute attr="eventSeverity">5</setEventAttribute>',
+        *event_lines,
         '',
         '</parsingInstructions>',
     ]

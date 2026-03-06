@@ -438,3 +438,60 @@ def test_text_format_user_assignment_from_authuser():
     xml = generate_parser(_TEXT_FORMAT_META, {}, "text", _PURE_APACHE_SAMPLES)
     assert 'exist _user' in xml
     assert 'attr="user"' in xml
+
+
+# ── HTTP status code conditional eventType ────────────────────────────────────
+
+def test_access_log_uses_web_generic_default_eventtype():
+    """Access log parser must use '{name}-Web-Generic' as default eventType, not '{name}-Event'."""
+    xml = generate_parser(_TEXT_FORMAT_META, {}, "text", _PURE_APACHE_SAMPLES)
+    assert "ApacheAccess-Web-Generic" in xml
+    assert "ApacheAccess-Event" not in xml
+
+
+def test_access_log_generates_http_status_choose_block():
+    """Access log parser must contain a <choose> block with HTTP status conditions."""
+    xml = generate_parser(_TEXT_FORMAT_META, {}, "text", _PURE_APACHE_SAMPLES)
+    assert "<choose>" in xml
+    assert "matches($httpStatusCode" in xml
+    assert "ApacheAccess-Web-Request-Success" in xml
+    assert "ApacheAccess-Web-Access-Denied" in xml
+    assert "ApacheAccess-Web-Client-Error" in xml
+    assert "ApacheAccess-Web-Server-Error" in xml
+
+
+def test_access_log_choose_block_checks_specific_codes_before_generic():
+    """401/403 must appear before generic '^4' so specific codes win."""
+    xml = generate_parser(_TEXT_FORMAT_META, {}, "text", _PURE_APACHE_SAMPLES)
+    pos_401 = xml.index("^401")
+    pos_403 = xml.index("^403")
+    pos_4xx = xml.index("^4'")  # generic 4xx
+    assert pos_401 < pos_4xx, "'^401' must appear before generic '^4'"
+    assert pos_403 < pos_4xx, "'^403' must appear before generic '^4'"
+
+
+def test_access_log_choose_guarded_by_exist_httpstatuscode():
+    """The choose block must be wrapped in <when test='exist httpStatusCode'>."""
+    xml = generate_parser(_TEXT_FORMAT_META, {}, "text", _PURE_APACHE_SAMPLES)
+    assert 'exist httpStatusCode' in xml
+
+
+def test_syslog_text_access_log_generates_http_status_choose():
+    """syslog+text access log must also emit the HTTP status choose block."""
+    xml = generate_parser(_TEXT_META_NO_ANCHOR, {}, "syslog+text", _NCSA_TS_SAMPLES)
+    assert "<choose>" in xml
+    assert "matches($httpStatusCode" in xml
+
+
+def test_non_access_log_keeps_simple_eventtype():
+    """Non-access-log formats must still use simple '{name}-Event' eventType."""
+    xml = generate_parser(BASIC_META, BASIC_MAPPINGS, "syslog+kv", [])
+    assert "TestParser-Event" in xml
+    assert "<choose>" not in xml
+
+def test_json_format_keeps_simple_eventtype():
+    """JSON format must not generate HTTP status choose block."""
+    json_meta = {**BASIC_META, "name": "MyJSON"}
+    xml = generate_parser(json_meta, {}, "syslog+json", [])
+    assert "MyJSON-Event" in xml
+    assert "<choose>" not in xml

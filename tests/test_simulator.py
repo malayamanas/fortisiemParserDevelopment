@@ -166,3 +166,62 @@ def test_todatetime_multiarg_form_joins_components():
     attrs = {"_mon": "Mar", "_day": "4", "_year": "2026", "_time": "02:12:45"}
     result = _apply_function("toDateTime($_mon, $_day, $_year, $_time)", attrs)
     assert "Mar" in result and "2026" in result and "02:12:45" in result
+
+
+# === HTTP status code → conditional eventType ===
+
+_HTTP_SAMPLES = [
+    '192.168.5.142 - - [04/Mar/2026:02:12:45 +0530] "POST /wp-login.php HTTP/1.1" 401 381 "-" "Mozilla/5.0"',
+    '192.168.5.143 - - [05/Mar/2026:08:30:00 +0530] "GET /index.html HTTP/1.1" 200 2048 "-" "Googlebot"',
+    '10.0.0.5 - - [05/Mar/2026:09:00:00 +0000] "GET /robots.txt HTTP/1.1" 404 0 "-" "curl/7.0"',
+    '10.0.0.6 - - [05/Mar/2026:10:00:00 +0000] "GET /redir HTTP/1.1" 301 0 "-" "curl/7.0"',
+    '10.0.0.7 - - [05/Mar/2026:11:00:00 +0000] "GET /crash HTTP/1.1" 500 0 "-" "curl/7.0"',
+]
+_HTTP_META = {**_APACHE_META, "name": "WebLog"}
+_HTTP_MAPPINGS = {
+    "srcIpAddr": "srcIpAddr", "httpMethod": "httpMethod",
+    "uriStem": "uriStem", "httpStatusCode": "httpStatusCode",
+}
+
+
+def test_simulator_401_gets_access_denied_eventtype():
+    xml_str = generate_parser(_HTTP_META, _HTTP_MAPPINGS, "text", _HTTP_SAMPLES)
+    r = simulate(xml_str, [_HTTP_SAMPLES[0]])[0]
+    assert r["fields"].get("eventType") == "WebLog-Web-Access-Denied"
+    assert r["fields"].get("eventSeverity") == "5"
+
+
+def test_simulator_200_gets_success_eventtype():
+    xml_str = generate_parser(_HTTP_META, _HTTP_MAPPINGS, "text", _HTTP_SAMPLES)
+    r = simulate(xml_str, [_HTTP_SAMPLES[1]])[0]
+    assert r["fields"].get("eventType") == "WebLog-Web-Request-Success"
+    assert r["fields"].get("eventSeverity") == "1"
+
+
+def test_simulator_404_gets_client_error_eventtype():
+    xml_str = generate_parser(_HTTP_META, _HTTP_MAPPINGS, "text", _HTTP_SAMPLES)
+    r = simulate(xml_str, [_HTTP_SAMPLES[2]])[0]
+    assert r["fields"].get("eventType") == "WebLog-Web-Client-Error"
+    assert r["fields"].get("eventSeverity") == "4"
+
+
+def test_simulator_301_gets_redirect_eventtype():
+    xml_str = generate_parser(_HTTP_META, _HTTP_MAPPINGS, "text", _HTTP_SAMPLES)
+    r = simulate(xml_str, [_HTTP_SAMPLES[3]])[0]
+    assert r["fields"].get("eventType") == "WebLog-Web-Request-Redirect"
+    assert r["fields"].get("eventSeverity") == "2"
+
+
+def test_simulator_500_gets_server_error_eventtype():
+    xml_str = generate_parser(_HTTP_META, _HTTP_MAPPINGS, "text", _HTTP_SAMPLES)
+    r = simulate(xml_str, [_HTTP_SAMPLES[4]])[0]
+    assert r["fields"].get("eventType") == "WebLog-Web-Server-Error"
+    assert r["fields"].get("eventSeverity") == "7"
+
+
+def test_simulator_multiple_status_codes_give_different_eventtypes():
+    """Passing all 5 samples must produce 5 distinct eventTypes."""
+    xml_str = generate_parser(_HTTP_META, _HTTP_MAPPINGS, "text", _HTTP_SAMPLES)
+    results = simulate(xml_str, _HTTP_SAMPLES)
+    types = [r["fields"].get("eventType") for r in results]
+    assert len(set(types)) == 5, f"Expected 5 distinct eventTypes, got: {types}"
