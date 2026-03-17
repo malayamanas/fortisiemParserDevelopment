@@ -1,0 +1,703 @@
+{
+  "source_file": "/Users/apple/FortiSIEM_Advanced_Search_SQL/FortiSIEM_Advance_SQL_Examples.txt",
+  "total_entries": 60,
+  "categories": {
+    "identity_authentication": [
+      "30 Day // RC4 TGS Requestor Accounts",
+      "ali-external-ip2",
+      "Chris's ADM User Locked Out",
+      "How many logon events have source IPs",
+      "SVC Creds Changed",
+      "Top Failed Windows/Linux logins by count",
+      "Top Successful and Failed Windows/Linux Logins by total count",
+      "Unusual Device login today",
+      "Unusual Windows RDP login today",
+      "Weak Auth - ALI",
+      "Weak Encryption Auth - Accounts",
+      "What's Failing",
+      "Who Got Admin",
+      "Who's Getting Locked"
+    ],
+    "threat_detection_lolbas_gtfobins": [
+      "FortiADC: WAF Signature Events with URL containing Base64 encoded characters",
+      "FortiADC: WAF Signature Events with URL containing GTFOBins",
+      "Linux: GTFOBin Process Created",
+      "Windows: Base64 Encoded Commands",
+      "Windows: Base64 Encoded PowerShell Commands",
+      "Windows: Command Line Obfuscation using escape characters",
+      "Windows: LOLAD Active Directory Command Match",
+      "Windows: LOLBIN Process Creation",
+      "Windows: LOLBIN Process launched from unexpected path",
+      "Windows: LOLBIN Process with command matching LOTS website",
+      "Windows: LOLBIN Process with outbound network connection to an external non-RFC1918 address",
+      "Windows: Suspicious PowerShell Cmdlet Match"
+    ],
+    "storage_infrastructure": [
+      "A sample raw message for each reporting device and event type",
+      "ClickHouse Storage Usage per Device Group",
+      "ClickHouse Storage Usage per Retention Policy",
+      "ClickHouse Storage Usage Trend per Retention Policy",
+      "ClickHouse Total and Used Online Storage",
+      "Decline in events from a reporting device",
+      "Dominating Firewalls Today",
+      "Dominating Windows Servers today",
+      "Existing Devices not reporting today",
+      "Most Frequent Reporting Device and Event Types today",
+      "New device reporting today",
+      "New FortiSIEM Audit Event today",
+      "New FortiSIEM Operational error today",
+      "Top 10 Reporting devices by event count and their proportions",
+      "Top 10 Reporting devices by event size"
+    ],
+    "anomaly_detection": [
+      "Spike in daily new incidents",
+      "Spike in events from a reporting device",
+      "Spike in event types from a device",
+      "Spike in inbound denied network traffic to a destination host",
+      "Spike in network traffic from a source",
+      "Spike in outbound denied network traffic from a source",
+      "Spike in outbound network activity to one destination country",
+      "Spike in SMB Connection from a source"
+    ],
+    "incident_network_tracking": [
+      "Events on epicbackupmhtc in last 24",
+      "Most Frequent Sources with DNS activity today",
+      "New incident today",
+      "Sample of Unknown Events per Reporting IP",
+      "Top 10 Event Types by count and their proportions",
+      "Top 10 Incidents and actors by event count and their proportion",
+      "Top Inbound Permit Destinations",
+      "Top Outbound Denied Sources",
+      "Top Outbound Permit Traffic"
+    ],
+    "windows_specific": [
+      "Unusual Windows Service today",
+      "Windows: Accounts Created and Deleted within the same Day in last week",
+      "Windows: Long Duration Terminal Services Sessions"
+    ]
+  },
+  "entries": [
+    {
+      "name": "30 Day // RC4 TGS Requestor Accounts",
+      "description": "Finds accounts requesting Kerberos TGS tickets using weak RC4/DES encryption (encryptAlgo 0x17 or 0x3) over last 30 days",
+      "data_source": null,
+      "event_types": ["Win-Security-4769-success"],
+      "time_window": "30 days",
+      "key_fields": ["user", "serviceName", "encryptAlgo", "reptDevName"],
+      "key_technique": "metrics_string array indexing for EAT access",
+      "category": "identity_authentication"
+    },
+    {
+      "name": "ali-external-ip2",
+      "description": "Finds external (non-RFC1918) source IPs for Windows network logon type 3 in last 24 hours",
+      "data_source": null,
+      "event_types": ["Win-Security-4624"],
+      "time_window": "24 hours",
+      "key_fields": ["srcIpAddr", "user"],
+      "key_technique": "toString(srcIpAddr) LIKE exclusions for private IP ranges",
+      "category": "identity_authentication"
+    },
+    {
+      "name": "A sample raw message for each reporting device and event type",
+      "description": "Collects one sample raw message per device+eventType pair seen in last 1 hour using ANY() aggregate function",
+      "data_source": "FortiSIEM",
+      "event_types": ["any"],
+      "time_window": "1 hour",
+      "key_fields": ["reptDevIpAddrV4", "eventType", "rawEventMsg"],
+      "key_technique": "any() function for representative sample, GROUP BY ALL shorthand",
+      "category": "storage_infrastructure"
+    },
+    {
+      "name": "Chris's ADM User Locked Out",
+      "description": "Finds workstations with cached credentials that locked out user admcsantana in last 24 hours",
+      "data_source": null,
+      "event_types": ["Win-Security-4740"],
+      "time_window": "24 hours",
+      "key_fields": ["targetDomain", "user"],
+      "key_technique": "indexOf(metrics_string.name, 'field') > 0 guard before value access",
+      "category": "identity_authentication"
+    },
+    {
+      "name": "ClickHouse Storage Usage per Device Group",
+      "description": "Calculates disk bytes per CMDB device group (Network/Server/Cloud/Others) using fsiem.mv_events materialized view",
+      "data_source": "FortiSIEM",
+      "event_types": [],
+      "time_window": "all time",
+      "key_fields": ["device_group", "bytes_on_disk", "total_events"],
+      "key_technique": "dictHas() for CMDB group lookup, cluster() for distributed query, CTE WITH blocks",
+      "category": "storage_infrastructure"
+    },
+    {
+      "name": "ClickHouse Storage Usage per Retention Policy",
+      "description": "Calculates total ClickHouse disk bytes per retention policy bucket from system.parts",
+      "data_source": "FortiSIEM",
+      "event_types": [],
+      "time_window": "all time",
+      "key_fields": ["retention_policy", "total_bytes"],
+      "key_technique": "extract(partition, regex) for partition parsing, cluster() system.parts query",
+      "category": "storage_infrastructure"
+    },
+    {
+      "name": "ClickHouse Storage Usage Trend per Retention Policy",
+      "description": "Daily trend of disk bytes per retention policy bucket from system.parts",
+      "data_source": "FortiSIEM",
+      "event_types": [],
+      "time_window": "all time",
+      "key_fields": ["date", "retention_policy", "total_bytes"],
+      "key_technique": "toStartOfDay(min_time) for daily bucketing of partition metadata",
+      "category": "storage_infrastructure"
+    },
+    {
+      "name": "ClickHouse Total and Used Online Storage",
+      "description": "Calculates total and used storage bytes across all local ClickHouse disks",
+      "data_source": "FortiSIEM",
+      "event_types": [],
+      "time_window": "current",
+      "key_fields": ["total_online_storage", "used_online_storage"],
+      "key_technique": "system.disks with is_remote=0 filter, cluster() for distributed",
+      "category": "storage_infrastructure"
+    },
+    {
+      "name": "Decline in events from a reporting device",
+      "description": "Finds devices reporting 50%+ fewer events in the last hour vs 4-hour rolling average; excludes devices with <10 events/hr",
+      "data_source": "FortiSIEM",
+      "event_types": ["any"],
+      "time_window": "5 hours",
+      "key_fields": ["reptDevName", "reptDevIP", "count", "avg_count_prev_4_hours", "ratio"],
+      "key_technique": "Window function avg() OVER ROWS BETWEEN 4 PRECEDING AND 1 PRECEDING for rolling average",
+      "category": "anomaly_detection"
+    },
+    {
+      "name": "Dominating Firewalls Today",
+      "description": "Identifies firewall devices sending 50%+ more events today than the average of all other firewalls (ratio > 1.5)",
+      "data_source": "FortiSIEM",
+      "event_types": ["any firewall events"],
+      "time_window": "today",
+      "key_fields": ["reptDevName", "reptDevIpAddrV4", "count", "avg_count_others", "ratio"],
+      "key_technique": "Window sum() OVER ROWS UNBOUNDED PRECEDING/FOLLOWING for per-device comparison, dictHas CMDB group filter",
+      "category": "anomaly_detection"
+    },
+    {
+      "name": "Dominating Windows Servers today",
+      "description": "Identifies Windows servers sending 50%+ more events today than the average of all other Windows servers",
+      "data_source": "FortiSIEM",
+      "event_types": ["any Windows Server events"],
+      "time_window": "today",
+      "key_fields": ["reptDevName", "reptDevIpAddrV4", "count", "avg_count_others", "ratio"],
+      "key_technique": "Same window function pattern as Dominating Firewalls, CMDB group PH_SYS_DEVICE_WINDOWS_SERVER",
+      "category": "anomaly_detection"
+    },
+    {
+      "name": "Events on epicbackupmhtc in last 24",
+      "description": "Finds all events mentioning epicbackupmhtc and session 25141 in raw message over last 24 hours",
+      "data_source": null,
+      "event_types": ["any"],
+      "time_window": "24 hours",
+      "key_fields": ["phRecvTime", "eventType", "rawEventMsg"],
+      "key_technique": "rawEventMsg LIKE '%keyword%' for full-text search on raw log",
+      "category": "incident_network_tracking"
+    },
+    {
+      "name": "Existing Devices not reporting today",
+      "description": "Finds devices seen in last 7 days that have NOT reported today; uses CTE anti-join pattern",
+      "data_source": "FortiSIEM",
+      "event_types": ["any external/flow events (phEventCategory IN (0,4,6))"],
+      "time_window": "7 days lookback, today exclusion",
+      "key_fields": ["reptDevName", "reptVendor", "reptModel", "last_seen"],
+      "key_technique": "GLOBAL NOT IN subquery anti-join with SETTINGS transform_null_in=1",
+      "category": "storage_infrastructure"
+    },
+    {
+      "name": "FortiADC: WAF Signature Events with URL containing Base64 encoded characters",
+      "description": "Detects FortiADC WAF hits where the infoURL contains URL-encoded (%) characters; decodes and counts them",
+      "data_source": "FortiADC via Syslog",
+      "event_types": ["FortiADC-Security-WAF-Signature"],
+      "time_window": "7 days",
+      "key_fields": ["infoURL", "encoded_chars", "decoded_url"],
+      "key_technique": "countSubstrings() + decodeURLComponent() on metrics_string array field",
+      "category": "threat_detection_lolbas_gtfobins"
+    },
+    {
+      "name": "FortiADC: WAF Signature Events with URL containing GTFOBins",
+      "description": "Detects FortiADC WAF hits where decoded URL matches a GTFOBins process name via CROSS JOIN lookup table",
+      "data_source": "FortiADC via Syslog",
+      "event_types": ["FortiADC-Security-WAF-Signature"],
+      "time_window": "7 days",
+      "key_fields": ["infoURL", "decoded_url", "functions", "matched_command"],
+      "key_technique": "CROSS JOIN fsiem.GTFOBin_0 lookup table with match() regex for process name detection",
+      "category": "threat_detection_lolbas_gtfobins"
+    },
+    {
+      "name": "How many logon events have source IPs",
+      "description": "Counts Win-Security-4624 events in last hour showing total, those with srcIpAddr, human users, and srcIP percentage",
+      "data_source": null,
+      "event_types": ["Win-Security-4624"],
+      "time_window": "1 hour",
+      "key_fields": ["total", "has_srcIP", "human_users", "srcIP_pct"],
+      "key_technique": "countIf() for conditional aggregation, NULL/empty checks on IP fields",
+      "category": "identity_authentication"
+    },
+    {
+      "name": "Linux: GTFOBin Process Created",
+      "description": "Detects Linux process executions matching GTFOBins tool names via CROSS JOIN lookup table",
+      "data_source": "Linux via FortiSIEM Agent",
+      "event_types": ["LINUX_PROCESS_EXEC"],
+      "time_window": "1 day",
+      "key_fields": ["user", "command", "functions", "matched_command"],
+      "key_technique": "CROSS JOIN fsiem.GTFOBin_0 with match() for word-boundary process name matching",
+      "category": "threat_detection_lolbas_gtfobins"
+    },
+    {
+      "name": "Most Frequent Reporting Device and Event Types today",
+      "description": "Approximate Top 10 device+eventType combos today using topK() aggregate (faster than GROUP BY + ORDER BY)",
+      "data_source": "FortiSIEM",
+      "event_types": ["any (phEventCategory IN (0,4,6))"],
+      "time_window": "today",
+      "key_fields": ["ReportingDeviceEventType"],
+      "key_technique": "topK(10)(concat(field1,'-',field2)) for approximate heavy hitters",
+      "category": "storage_infrastructure"
+    },
+    {
+      "name": "Most Frequent Sources with DNS activity today",
+      "description": "Approximate Top 10 source IPs with DNS traffic today using topK(); includes both DNS server events and firewall port-53 events",
+      "data_source": "FortiSIEM",
+      "event_types": ["DNS event groups via dictHas CMDB"],
+      "time_window": "today",
+      "key_fields": ["SourceIP"],
+      "key_technique": "topK(10)(srcIpAddrV4) with complex CMDB event group filtering for DNS categories",
+      "category": "incident_network_tracking"
+    },
+    {
+      "name": "New device reporting today",
+      "description": "Finds devices reporting today that were NOT seen at all in the previous 7 days",
+      "data_source": "FortiSIEM",
+      "event_types": ["any external/flow events"],
+      "time_window": "today vs 7-day baseline",
+      "key_fields": ["reptDevName", "reptDevIpAddrV4", "reptVendor", "reptModel"],
+      "key_technique": "GLOBAL NOT IN CTE anti-join with SETTINGS transform_null_in=1",
+      "category": "storage_infrastructure"
+    },
+    {
+      "name": "New FortiSIEM Audit Event today",
+      "description": "Finds PH_AUDIT* event types seen today that never appeared in the previous 7 days",
+      "data_source": "FortiSIEM",
+      "event_types": ["PH_AUDIT* (phEventCategory=2)"],
+      "time_window": "today vs 7-day baseline",
+      "key_fields": ["eventType", "procName", "user", "srcIpAddrV4", "rawEventMsg"],
+      "key_technique": "GLOBAL NOT IN subquery anti-join on eventType baseline",
+      "category": "storage_infrastructure"
+    },
+    {
+      "name": "New FortiSIEM Operational error today",
+      "description": "Finds new PHL_ERROR operational messages today (not in PH_DISCOV) never seen in previous 7 days, keyed on eventType+procName+fileName+lineNumber",
+      "data_source": "FortiSIEM",
+      "event_types": ["operational (phEventCategory=3) with PHL_ERROR"],
+      "time_window": "today vs 7-day baseline",
+      "key_fields": ["eventType", "procName", "fileName", "lineNumber", "rawEventMsg"],
+      "key_technique": "Tuple NOT IN subquery: (eventType, procName, fileName, lineNumber) multi-field anti-join",
+      "category": "storage_infrastructure"
+    },
+    {
+      "name": "New Windows Ports Opening Today",
+      "description": "Detects PH_OSQUERY_WIN_PROCESS_PORT events for host+port combinations not seen in previous 7 days (name missing in source file)",
+      "data_source": "FortiSIEM",
+      "event_types": ["PH_OSQUERY_WIN_PROCESS_PORT"],
+      "time_window": "today vs 7-day baseline",
+      "key_fields": ["hostName", "hostIpAddrV4", "procName", "destIpPort"],
+      "key_technique": "Tuple NOT IN subquery: (hostName, destIpPort) anti-join",
+      "category": "windows_specific",
+      "note": "Entry in source file is missing Name line"
+    },
+    {
+      "name": "New incident today",
+      "description": "Finds (eventType, incidentSrc, incidentTarget) incident combinations today not seen in previous 7 days",
+      "data_source": "FortiSIEM",
+      "event_types": ["any (phEventCategory=1 incidents)"],
+      "time_window": "today vs 7-day baseline",
+      "key_fields": ["eventType", "incidentSrc", "incidentTarget"],
+      "key_technique": "Tuple NOT IN subquery on 3-field incident key",
+      "category": "incident_network_tracking"
+    },
+    {
+      "name": "Sample of Unknown Events per Reporting IP",
+      "description": "Returns 10 most recent Unknown_EventType events per reporting IP using ROW_NUMBER() window function",
+      "data_source": "FortiSIEM",
+      "event_types": ["Unknown_EventType"],
+      "time_window": "7 days",
+      "key_fields": ["reptIp", "rawEventMsg"],
+      "key_technique": "ROW_NUMBER() OVER (PARTITION BY reptDevIpAddrV4 ORDER BY phRecvTime DESC) for per-device top-N",
+      "category": "incident_network_tracking"
+    },
+    {
+      "name": "Spike in daily new incidents",
+      "description": "Lists days last week where incident count exceeds 50% of the same weekday's average from prior 4 weeks",
+      "data_source": "FortiSIEM",
+      "event_types": ["any incidents (phEventCategory=1)"],
+      "time_window": "5 weeks",
+      "key_fields": ["date", "day_of_week", "count", "avg_count_prev_4_weeks", "ratio"],
+      "key_technique": "PARTITION BY day_of_week with ROWS BETWEEN 4 PRECEDING AND 1 PRECEDING for weekday-aligned baseline",
+      "category": "anomaly_detection"
+    },
+    {
+      "name": "Spike in events from a reporting device",
+      "description": "Identifies devices reporting 50%+ more events in last hour vs 4-hour rolling average",
+      "data_source": "FortiSIEM",
+      "event_types": ["any"],
+      "time_window": "5 hours",
+      "key_fields": ["reptDevName", "reptDevIP", "count", "avg_count_prev_4_hours", "ratio"],
+      "key_technique": "Window avg() OVER ROWS BETWEEN 4 PRECEDING AND 1 PRECEDING, ratio > 1.5 filter",
+      "category": "anomaly_detection"
+    },
+    {
+      "name": "Spike in event types from a device",
+      "description": "Identifies device+eventType combinations spiking 50%+ in last hour vs 4-hour rolling average (name missing in source file)",
+      "data_source": "FortiSIEM",
+      "event_types": ["any"],
+      "time_window": "5 hours",
+      "key_fields": ["reptDevName", "reptDevIP", "eventType", "count", "avg_count_prev_4_hours", "ratio"],
+      "key_technique": "Window function partitioned by (reptDevName, reptDevIP, eventType)",
+      "category": "anomaly_detection",
+      "note": "Entry in source file is missing Name line"
+    },
+    {
+      "name": "Spike in inbound denied network traffic to a destination host",
+      "description": "Detects destination IPs receiving 50%+ more deny events yesterday vs 7-day daily average",
+      "data_source": "FortiSIEM",
+      "event_types": ["PH_SYS_EVENT_DenyTraffic group"],
+      "time_window": "7 days + yesterday",
+      "key_fields": ["destIp", "count", "avg_count_prev_7_days", "ratio"],
+      "key_technique": "Window avg() OVER ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING; dictHas DenyTraffic group filter",
+      "category": "anomaly_detection"
+    },
+    {
+      "name": "Spike in network traffic from a source",
+      "description": "Detects source IPs sending 50%+ more permitted network traffic yesterday vs 7-day daily average",
+      "data_source": "FortiSIEM",
+      "event_types": ["PH_SYS_EVENT_PermitNetTraffic", "PH_SYS_EVENT_BiNetflowTraffic"],
+      "time_window": "7 days + yesterday",
+      "key_fields": ["srcIp", "count", "avg_count_prev_7_days", "ratio"],
+      "key_technique": "Window avg ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING; permit+binetflow CMDB groups",
+      "category": "anomaly_detection"
+    },
+    {
+      "name": "Spike in outbound denied network traffic from a source",
+      "description": "Detects source IPs getting denied 50%+ more times yesterday vs 7-day daily average",
+      "data_source": "FortiSIEM",
+      "event_types": ["PH_SYS_EVENT_DenyTraffic group"],
+      "time_window": "7 days + yesterday",
+      "key_fields": ["srcIp", "count", "avg_count_prev_7_days", "ratio"],
+      "key_technique": "Window avg ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING; DenyTraffic group filter",
+      "category": "anomaly_detection"
+    },
+    {
+      "name": "Spike in outbound network activity to one destination country",
+      "description": "Detects destination countries receiving 50%+ more denied traffic yesterday vs 7-day daily average",
+      "data_source": "FortiSIEM",
+      "event_types": ["PH_SYS_EVENT_DenyTraffic group"],
+      "time_window": "7 days + yesterday",
+      "key_fields": ["destCountry", "count", "avg_count_prev_7_days", "ratio"],
+      "key_technique": "destGeoCountry geo field with window avg baseline",
+      "category": "anomaly_detection"
+    },
+    {
+      "name": "Spike in SMB Connection from a source",
+      "description": "Detects sources sending 50%+ more SMB traffic (ports 139/445) yesterday vs 7-day daily average",
+      "data_source": "FortiSIEM",
+      "event_types": ["PH_SYS_EVENT_PermitNetTraffic", "PH_SYS_EVENT_BiNetflowTraffic"],
+      "time_window": "7 days + yesterday",
+      "key_fields": ["srcIp", "count", "avg_count_prev_7_days", "ratio"],
+      "key_technique": "destIpPort IN (139, 445) filter combined with permit/binetflow CMDB groups",
+      "category": "anomaly_detection"
+    },
+    {
+      "name": "SVC Creds Changed",
+      "description": "Finds password reset events (4724) for accounts containing 'svc' or 'service' in username in last 7 days",
+      "data_source": null,
+      "event_types": ["Win-Security-4724"],
+      "time_window": "7 days",
+      "key_fields": ["subjectUsername", "targetUser", "targetDomain", "reptDevName"],
+      "key_technique": "lower() + LIKE for case-insensitive service account name pattern matching",
+      "category": "identity_authentication"
+    },
+    {
+      "name": "Top 10 Event Types by count and their proportions",
+      "description": "Top 10 event types by count with percentage of total in last 10 minutes",
+      "data_source": "FortiSIEM",
+      "event_types": ["any"],
+      "time_window": "10 minutes",
+      "key_fields": ["eventType", "event_count", "pct"],
+      "key_technique": "SUM(COUNT(*)) OVER () window for percentage of total calculation",
+      "category": "incident_network_tracking"
+    },
+    {
+      "name": "Top 10 Incidents and actors by event count and their proportion",
+      "description": "Top 10 incident types with actors (src/dest/user) by count and percentage in last 1 day",
+      "data_source": "FortiSIEM",
+      "event_types": ["any incidents (phEventCategory IN (1,100))"],
+      "time_window": "1 day",
+      "key_fields": ["eventType", "eventSeverityCat", "srcIpAddrV4", "destIpAddrV4", "user", "incident_count", "pct"],
+      "key_technique": "sum(count) AS incident_count with window SUM OVER () for pct, phEventCategory 1 and 100",
+      "category": "incident_network_tracking"
+    },
+    {
+      "name": "Top 10 Reporting devices by event count and their proportions",
+      "description": "Top 10 reporting devices by external/flow event count with percentage in last 10 minutes",
+      "data_source": "FortiSIEM",
+      "event_types": ["external/flow (phEventCategory IN (0,4))"],
+      "time_window": "10 minutes",
+      "key_fields": ["reptDevName", "reptDevIpAddrV4", "reptVendor", "reptModel", "event_count", "pct"],
+      "key_technique": "COUNT(*) * 100.0 / SUM(COUNT(*)) OVER () for percentage",
+      "category": "storage_infrastructure"
+    },
+    {
+      "name": "Top 10 Reporting devices by event size",
+      "description": "Top 10 reporting devices by raw event size (MB) in last 10 minutes",
+      "data_source": "FortiSIEM",
+      "event_types": ["any"],
+      "time_window": "10 minutes",
+      "key_fields": ["reptDevName", "reptDevIpAddrV4", "reptVendor", "reptModel", "sizeMB"],
+      "key_technique": "round(SUM(rawEventSize / (1024*1024)), 2) for MB conversion from rawEventSize bytes",
+      "category": "storage_infrastructure"
+    },
+    {
+      "name": "Top Failed Windows/Linux logins by count",
+      "description": "Top 100 failed Windows or Linux SSH login combinations by count in last 1 day",
+      "data_source": "FortiSIEM",
+      "event_types": ["Win-Security-4625", "Generic_Unix_Failed_SSH_Login"],
+      "time_window": "1 day",
+      "key_fields": ["srcIpAddrV4", "reptDevName", "destIpAddrV4", "user", "failed_login"],
+      "key_technique": "IN clause for multi-eventType filter, GROUP BY 6 fields",
+      "category": "identity_authentication"
+    },
+    {
+      "name": "Top Inbound Permit Destinations",
+      "description": "Top inbound permit traffic (external src → internal dest) by source country, dest IP, and port in last 1 hour",
+      "data_source": "FortiSIEM",
+      "event_types": ["PH_SYS_EVENT_PermitTraffic group"],
+      "time_window": "1 hour",
+      "key_fields": ["srcGeoCountry", "destIpAddrV4", "destIpPort", "permit_conn"],
+      "key_technique": "IPv6 range comparisons on metrics_ip array for public/private IP classification; PH_SYS_EVENT_PermitTraffic group",
+      "category": "incident_network_tracking"
+    },
+    {
+      "name": "Top Outbound Denied Sources",
+      "description": "Top outbound denied traffic (internal src → external dest) by src IP, dest country and port in last 1 hour",
+      "data_source": "FortiSIEM",
+      "event_types": ["PH_SYS_EVENT_DenyTraffic group"],
+      "time_window": "1 hour",
+      "key_fields": ["srcIpAddrV4", "destIpPort", "destGeoCountry", "deny_conn"],
+      "key_technique": "toIPv6() range checks on metrics_ip array for RFC1918 src/public dest classification",
+      "category": "incident_network_tracking"
+    },
+    {
+      "name": "Top Outbound Permit Traffic",
+      "description": "Top outbound permitted traffic (internal src → external dest) by src, dest IP, country and port in last 1 hour",
+      "data_source": "FortiSIEM",
+      "event_types": ["PH_SYS_EVENT_PermitTraffic group"],
+      "time_window": "1 hour",
+      "key_fields": ["srcIpAddrV4", "destIpAddrV4", "destIpPort", "destGeoCountry", "permit_conn"],
+      "key_technique": "Same toIPv6() range pattern; PH_SYS_EVENT_PermitTraffic CMDB group",
+      "category": "incident_network_tracking"
+    },
+    {
+      "name": "Top Successful and Failed Windows/Linux Logins by total count",
+      "description": "Per-user success and failure login counts in last 1 day; excludes machine accounts, SYSTEM, LOCAL SERVICE, NETWORK SERVICE, DWM-, UMDF-",
+      "data_source": "FortiSIEM",
+      "event_types": ["Win-Security-4624", "Win-Security-4625", "Generic_Unix_Successful_SSH_Login", "Generic_Unix_Failed_SSH_Login"],
+      "time_window": "1 day",
+      "key_fields": ["reptDevName", "user", "successful_login", "failed_login"],
+      "key_technique": "SUM(IF(eventType IN (...), 1, 0)) conditional counting for pivoted success/fail in single query",
+      "category": "identity_authentication"
+    },
+    {
+      "name": "Unusual Device login today",
+      "description": "Finds (srcIP, user, reptDevName) login combinations today never seen in previous 2 weeks",
+      "data_source": "FortiSIEM",
+      "event_types": ["PH_SYS_EVENT_HostLogonSuccess group"],
+      "time_window": "today vs 14-day baseline",
+      "key_fields": ["srcIpAddrV4", "user", "reptDevName", "reptDevIpAddrV4"],
+      "key_technique": "3-tuple GLOBAL NOT IN subquery anti-join; CMDB group PH_SYS_EVENT_HostLogonSuccess",
+      "category": "identity_authentication"
+    },
+    {
+      "name": "Unusual Windows RDP login today",
+      "description": "Finds RDP/Terminal Service logins (winLogonType=10) today from (srcIP, user, reptDev) combinations not seen in previous 2 weeks",
+      "data_source": "FortiSIEM",
+      "event_types": ["Win-Security-4624"],
+      "time_window": "today vs 14-day baseline",
+      "key_fields": ["srcIpAddrV4", "user", "reptDevName"],
+      "key_technique": "winLogonType=10 filter; 3-tuple GLOBAL NOT IN; note srcIpAddr vs srcIpAddrV4 discrepancy in outer query",
+      "category": "identity_authentication"
+    },
+    {
+      "name": "Unusual Windows Service today",
+      "description": "Detects Windows services running from unexpected paths (serviceName+servicePath combo) not seen in previous 14 days",
+      "data_source": "FortiSIEM",
+      "event_types": ["PH_OSQUERY_WIN_SERVICES"],
+      "time_window": "today vs 14-day baseline",
+      "key_fields": ["hostName", "serviceName", "servicePath"],
+      "key_technique": "Nested WITH alias for metrics_string values; CTE with inner WITH for baseline; tuple NOT IN (name, path)",
+      "category": "windows_specific"
+    },
+    {
+      "name": "Weak Auth - ALI",
+      "description": "Finds service accounts using weak Kerberos encryption (RC4/DES) in 4769 events over last 7 days using extractAll on rawEventMsg",
+      "data_source": null,
+      "event_types": ["Win-Security-4769-success"],
+      "time_window": "7 days",
+      "key_fields": ["service_account", "domain", "domain_controller", "encryption_type"],
+      "key_technique": "extractAll(rawEventMsg, regex) for field extraction from raw XML message",
+      "category": "identity_authentication"
+    },
+    {
+      "name": "Weak Encryption Auth - Accounts",
+      "description": "Classifies weak Kerberos encryption (RC4=0x17, DES=0x3/0x1) in 4769 events with CASE labeling over last 7 days",
+      "data_source": null,
+      "event_types": ["Win-Security-4769-success"],
+      "time_window": "7 days",
+      "key_fields": ["Service Account", "Domain", "Domain Controller", "Encryption Type", "Total Requests (7 Days)"],
+      "key_technique": "CASE WHEN rawEventMsg LIKE '%TicketEncryptionType\\'>0x17%' for classification from raw message",
+      "category": "identity_authentication"
+    },
+    {
+      "name": "What's Failing",
+      "description": "Failed logins grouped by account, domain, source host, failure reason and target server in last 24 hours",
+      "data_source": null,
+      "event_types": ["Win-Security-4625"],
+      "time_window": "24 hours",
+      "key_fields": ["failed_account", "domain", "source_host", "failure_reason", "target_server", "failure_count"],
+      "key_technique": "metrics_string array access for user, domain, srcName, errReason fields",
+      "category": "identity_authentication"
+    },
+    {
+      "name": "Who Got Admin",
+      "description": "Finds users added to admin/privileged groups (domain/local/universal) in last 7 days using CASE for group type",
+      "data_source": null,
+      "event_types": ["Win-Security-4728", "Win-Security-4732", "Win-Security-4756"],
+      "time_window": "7 days",
+      "key_fields": ["group_type", "changed_by", "user_added", "to_group", "dc"],
+      "key_technique": "CASE eventType WHEN for group type labeling; lower() LIKE on targetUserGrp for admin group names",
+      "category": "identity_authentication"
+    },
+    {
+      "name": "Who's Getting Locked",
+      "description": "Account lockouts grouped by user, domain, DC with count and most recent lockout in last 24 hours",
+      "data_source": null,
+      "event_types": ["Win-Security-4740"],
+      "time_window": "24 hours",
+      "key_fields": ["locked_account", "domain", "reporting_dc", "lockout_count", "last_lockout"],
+      "key_technique": "MAX(phRecvTime) for latest lockout timestamp alongside COUNT(*)",
+      "category": "identity_authentication"
+    },
+    {
+      "name": "Windows: Accounts Created and Deleted within the same Day in last week",
+      "description": "Detects accounts created AND deleted within the same day in last 7 days using INNER JOIN on reptDevName+targetUser",
+      "data_source": "Microsoft Windows Security Log via OMI or FortiSIEM Agent",
+      "event_types": ["Win-Security-4720", "Win-Security-4726"],
+      "time_window": "7 days",
+      "key_fields": ["reptDevName", "targetUser", "creationTime", "deletionTime"],
+      "key_technique": "INNER JOIN between creation/deletion CTEs on device+user; WITH TIME_RANGE constant for 1-day window check",
+      "category": "windows_specific"
+    },
+    {
+      "name": "Windows: Base64 Encoded Commands",
+      "description": "Detects Sysmon process creation events with -EncodedCommand parameter; decodes the Base64 payload inline",
+      "data_source": "Microsoft Windows Sysmon via FortiSIEM Agent",
+      "event_types": ["Win-Sysmon-1-Create-Process"],
+      "time_window": "7 days",
+      "key_fields": ["command", "DecodedCommand"],
+      "key_technique": "base64Decode(regexpExtract(command, '-EncodedCommand\\s+(.*)', 1)) for inline decode",
+      "category": "threat_detection_lolbas_gtfobins"
+    },
+    {
+      "name": "Windows: Base64 Encoded PowerShell Commands",
+      "description": "Detects PowerShell events with -EncodedCommand in appName; decodes the Base64 payload inline",
+      "data_source": "Microsoft Windows PowerShell Operational Logs via FortiSIEM Agent",
+      "event_types": ["Win-PowerShell-*"],
+      "time_window": "7 days",
+      "key_fields": ["appName", "DecodedCommand"],
+      "key_technique": "base64Decode(regexpExtract(appName, '-EncodedCommand\\\\s+(.*)', 1)) on appName field",
+      "category": "threat_detection_lolbas_gtfobins"
+    },
+    {
+      "name": "Windows: Command Line Obfuscation using escape characters",
+      "description": "Scores commands on 13 obfuscation indicators (Unicode, split quoting, mixed case, excessive special chars, char functions) and returns huntScore >= 1",
+      "data_source": "Microsoft Windows Security Log, Sysmon via FortiSIEM Agent",
+      "event_types": ["Win-Sysmon-1-Create-Process", "Win-Security-4688"],
+      "time_window": "7 days",
+      "key_fields": ["command", "procName", "parent", "huntScore"],
+      "key_technique": "countMatches() + positionCaseInsensitive() for multi-indicator scoring; HAVING huntScore >= 1",
+      "category": "threat_detection_lolbas_gtfobins"
+    },
+    {
+      "name": "Windows: LOLAD Active Directory Command Match",
+      "description": "Detects AD commands matching LOLAD project entries via CROSS JOIN; handles regex and plain-string patterns separately",
+      "data_source": "Microsoft Windows Security Log, Sysmon via FortiSIEM Agent",
+      "event_types": ["Win-Sysmon-1-Create-Process", "Win-Security-4688"],
+      "time_window": "7 days",
+      "key_fields": ["command", "description", "reference", "commandMatch"],
+      "key_technique": "CROSS JOIN fsiem.LOLAD_0; conditional match() for regex patterns vs ILIKE for plain strings based on special char presence",
+      "category": "threat_detection_lolbas_gtfobins"
+    },
+    {
+      "name": "Windows: LOLBIN Process Creation",
+      "description": "Detects process names matching LOLBAS project using multiMatchAllIndices() for batch pattern matching; ARRAY JOIN to explode matches",
+      "data_source": "Microsoft Windows Security Log, Sysmon via FortiSIEM Agent",
+      "event_types": ["Win-Sysmon-1-Create-Process", "Win-Security-4688"],
+      "time_window": "7 days",
+      "key_fields": ["command", "tagName", "commandMatch"],
+      "key_technique": "WITH lolbins array + patterns array; multiMatchAllIndices(cmd, patterns) + ARRAY JOIN for efficient multi-pattern matching",
+      "category": "threat_detection_lolbas_gtfobins"
+    },
+    {
+      "name": "Windows: LOLBIN Process launched from unexpected path",
+      "description": "Detects LOLBAS processes running from paths not matching expected paths defined in LOLBAS project",
+      "data_source": "Microsoft Windows Security Log, Sysmon via FortiSIEM Agent",
+      "event_types": ["Win-Security-4688", "Win-Sysmon-1-Create-Process"],
+      "time_window": "7 days",
+      "key_fields": ["command", "procName", "tagName", "matched_command", "expected_paths", "path_match_status"],
+      "key_technique": "arrayExists(path -> procName ILIKE ...) on splitByString(';', paths) for path validation; HAVING path_match_status='Path Mismatch'",
+      "category": "threat_detection_lolbas_gtfobins"
+    },
+    {
+      "name": "Windows: LOLBIN Process with command matching LOTS website",
+      "description": "Detects LOLBAS processes whose command line references a trusted site from the LOTS project (C2/exfil staging)",
+      "data_source": "Microsoft Windows Security Log, Sysmon via FortiSIEM Agent",
+      "event_types": ["Win-Security-4688", "Win-Sysmon-1-Create-Process"],
+      "time_window": "7 days",
+      "key_fields": ["CommandLine", "shortProcName", "LOLBAS_Match", "LOTS_Match"],
+      "key_technique": "Double CROSS JOIN (LOLBAS_0 + LOTS_0); shortProcName match + command ILIKE LOTS website check",
+      "category": "threat_detection_lolbas_gtfobins"
+    },
+    {
+      "name": "Windows: LOLBIN Process with outbound network connection to an external non-RFC1918 address",
+      "description": "Detects Sysmon network connection events from LOLBAS processes to external IP addresses",
+      "data_source": "Microsoft Windows Sysmon via FortiSIEM Agent",
+      "event_types": ["Win-Sysmon-3-Network-Connect-IPv4"],
+      "time_window": "7 days",
+      "key_fields": ["srcIpAddrV4", "destIpAddrV4", "destIpPort", "tagName", "commandMatch"],
+      "key_technique": "CROSS JOIN LOLBAS_0 with shortProcName ILIKE dict.lolbin; srcIpAddrV4 != destIpAddrV4 to exclude loopback",
+      "category": "threat_detection_lolbas_gtfobins"
+    },
+    {
+      "name": "Windows: Long Duration Terminal Services Sessions",
+      "description": "Tracks RDP/Terminal Services sessions lasting >1 hour by joining start/end events; shows duration, day name, and business hours classification",
+      "data_source": "Microsoft Windows Terminal Services LocalSessionManager/Operational logs via FortiSIEM Agent",
+      "event_types": ["Win-TerminalServices-LocalSessionManager-21", "Win-TerminalServices-LocalSessionManager-25", "Win-TerminalServices-LocalSessionManager-24", "Win-TerminalServices-LocalSessionManager-23"],
+      "time_window": "14 days",
+      "key_fields": ["User Name", "Session ID", "Session Duration", "Business Logon Hours"],
+      "key_technique": "Two CTEs with ROW_NUMBER() OVER (PARTITION BY user, sessionId ORDER BY phRecvTime) for session matching; UNION ALL for NULL vs non-NULL source IP joins; formatDateTime('%w') for weekday names",
+      "category": "windows_specific"
+    },
+    {
+      "name": "Windows: Suspicious PowerShell Cmdlet Match",
+      "description": "Detects PowerShell script block (4104) events containing cmdlets from MaliciousPowershellCmdlet lookup table",
+      "data_source": "Microsoft Windows Security Log, Sysmon via FortiSIEM Agent",
+      "event_types": ["Win-PowerShell-4104"],
+      "time_window": "7 days",
+      "key_fields": ["script", "description", "toolkit", "commandMatch"],
+      "key_technique": "CROSS JOIN fsiem.MaliciousPowershellCmdlet_0; match(script, CONCAT('(?i)(^|\\\\s)', dict.cmdlet, '(\\\\s|$)')) for word-boundary cmdlet detection",
+      "category": "threat_detection_lolbas_gtfobins"
+    }
+  ]
+}
